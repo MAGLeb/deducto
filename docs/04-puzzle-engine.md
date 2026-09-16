@@ -1,4 +1,8 @@
-# Puzzle engine: generation, solver, difficulty
+# Puzzle engine: generation, solver, difficulty — the Deduction Grid
+
+> 🧩 **One format's engine.** Generation, the solver and the whole tier model below are the
+> Deduction Grid's. A second format brings its own generator and its own notion of difficulty; what
+> it must NOT bring is its own streak, boards or points ([12-game-types.md](12-game-types.md)).
 
 ## Puzzle structure
 

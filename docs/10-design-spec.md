@@ -1,251 +1,881 @@
-# Deducto redesign design spec (implemented in src/client/index.html + main.ts)
+# Deducto design spec — D3 "Manila"
 
-Synthesis of 4 studies (daily-games, dark-a11y, Devvit, type/spacing) and 4 audits (color, type-size, hierarchy, mobile). All contrasts recomputed via WCAG relative luminance on real backgrounds.
+**Status:** this is the design system for the redesign (internal plan 03b, §B "visual direction",
+decided 2026-08-07 — the `plans/` tree is gitignored and is not part of the published repo).
+It **replaces** the dark-navy system that shipped for the hackathon. The old spec is preserved
+verbatim in [10-design-spec-legacy.md](10-design-spec-legacy.md) — read it when you need to know
+why an old value was what it was; do not implement from it.
 
-Core principles (unchanged): the grid dominates; dark navy + soft amber accent #ff8c42 (do NOT switch to #FF4500 - taken by Reddit's system UI); green = confirmed, red = impossible/violated; mobile priority (tap-only, iOS webview); a single self-contained HTML; do not touch JS logic, keep DOM changes minimal (classes/wrappers).
+**Reference implementation:** [10-design-spec-proto.html](10-design-spec-proto.html) — one file, no build,
+no network, opens straight in a browser. Every rule below is live there. States are addressable:
+`#s=<state>&t=<light|dark>&shot=1`.
+States: `splash · game-empty · game-mid · game-violated · game-solved · result · board · load · error`.
 
-> **Update (2026-07-07):** the community loop (topic vote / submit suspect / deduction card for sharing) and the alternative "Tabs" board view have been removed from the prototype; the only remaining view is the single board. The directives below that relate to them (poll/submit/viewswitch/tab/cell/red-soft) are **historical**, read them as audit context, not as tasks. Separately: the tomorrow block later returned, but now as an honest difficulty vote Harder/Same/Softer (`r-tomorrow`/`renderVote`) - it is live (see item 16), this is NOT a topic poll.
+It is the *reference*, not the *evidence*. Since the design landed, the screenshot matrix (§7) is
+shot from the real built client against a fixture server; the prototype is kept for reading a rule
+in isolation, and it does not carry the screens the spec never mocked (the standings ledger, the
+coach tip, the hint ladder).
+
+**Scope.** This document owns tokens, components and their states. It does **not** own the
+entrypoint architecture, expanded mode, or the removal of inline scroll — that is plan 03a,
+which lands first on the old tokens; this spec is applied on top as the third step.
 
 ---
 
-## 1. Design tokens
+## 0. The one idea
 
-### 1.1 Color (declare in `:root`, replace hardcoded values with var())
+> **Colour belongs to evidence. Chrome is ink on paper.**
 
-**Surfaces - "higher = lighter" elevation ladder (Material principle, no shadows):**
+The interface is a case file: warm paper, ink, hairlines, stamps. The only hues that exist
+are the four coats (Okabe-Ito) and one archive red. Progress, time, buttons, headings,
+the board frame, the histogram, the leaderboard — all achromatic. That single rule is what
+makes a colourful 4×3 evidence grid legible instead of noisy, and it is what makes the result
+card live in the same world as the board (the old system's white-modal-over-dark-game
+dissonance, decision №20, is gone by construction: there are no local token overrides anywhere).
 
-| Token | Hex | Role | Contrast |
+Five consequences, all deliberate:
+
+| | Old (navy) | D3 (Manila) |
+|---|---|---|
+| Semantic hues in chrome | orange, green, red, yellow, blue, purple | **none** — one archive red, used once per screen |
+| "Confirmed" | green ring | circled in ink (`outline`) — CVD-immune |
+| "Satisfied clue" | green badge | struck through + muted, number box filled ink-3 |
+| Radii | 4 tokens, up to 18px | **2** — `0` and `2px` |
+| Emoji in chrome | 🧵 ✔ ⏱️ 🔥 💡 🏆 ✉️ 🥇 | mono caps labels + 4 inline SVG line icons |
+
+Item emoji (🍕 ⌨️ 🥄 📜) stay. They are content, they carry the puzzle's nouns, and they are
+duplicated by position in a fixed column order.
+
+**Anti-goals (hard).** No paper textures, no coffee rings, no paperclips, no photographic
+shadows, no torn edges, no rotated "taped" cards. Skeuomorphism is rejected outright.
+Paper is produced by three things only: the palette, the type pairing, and hairlines.
+The single rotation in the system is the 3° tilt on `.stamp`, which is what makes a boxed
+mono label read as a stamp rather than a badge.
+
+---
+
+## 1. Tokens
+
+All contrasts below are WCAG 2.x relative-luminance ratios computed on the **actual** background
+the token is used on. Method and script: §7. Thresholds: **4.5:1** for text (AA, normal size),
+**3:1** for non-text boundaries that carry information (SC 1.4.11).
+
+> **Revised 2026-08-08 — the surface ladder repair (decision 71/72).** §1.1, §1.2, §1.3, §1.4 and
+> §1.6 below carry the current values; §1.5 is unchanged. What moved and why:
+>
+> | Token | Was (light) | Now (light) | Why |
+> |---|---|---|---|
+> | `--paper` | `#E7DFD1` | `#BEAD8C` | the desk was 1.18:1 under the sheet, so no card on it had an edge; it is now 2.00:1 under it, which is where a lightness step starts reading as a boundary |
+> | `--sheet` | `#F6F2E9` | `#F8F4EB` | a hair lighter, to buy back some of the step |
+> | `--sheet-raised` | `#FFFCF6` | `#FFFDF8` | same |
+> | `--groove` | `#DBD2C1` | `#D9CFBA` | as deep as `--ink-3` at AA allows (the cap, stated below) |
+> | `--rule` | `#D2C8B5` | `#BEB299` | 1.48:1 on the sheet is a hairline nobody can see; 1.91:1 is still decorative but the rows it divides read as rows |
+> | `--rule-strong` | `#7E725C` | `#655B47` | it has to clear 3:1 on the darkened `--paper` too (3.04:1) |
+> | `--stamp-wash` | `#EEE0D7` | `#E4C8BD` | recomputed at 22% `--stamp` over the new `--sheet` |
+> | `--coat-*-out` | — | — | recomputed over the new `--sheet` (light) and the new dark `--sheet`; §1.6 |
+> | `--shadow-1` | *deleted by dec. 57* | reinstated, one token | `--sheet-raised` is capped by white and cannot buy an edge with lightness; a printed drop can |
+>
+> Dark is re-cut on the same criteria, and `--ink-2`, `--ink-3` and `--stamp` are lightened there
+> to keep AA on the raised sheet once it moves. §2 (contrast), §3 (CVD ΔE), §6 (the token mirror) and
+> §7–§8 have since been re-transcribed from the shipped file and now agree with it. The source of
+> truth is [tokens.css](../src/client/tokens.css); the reproducible run against it is
+> `plans/assets/proto/04-polish/verify-contrast.py`, which also audits surface-to-surface pairs —
+> the check whose absence let the original ladder through. Re-run it and re-transcribe §2/§3 on any
+> token edit.
+
+### 1.1 Surfaces — higher is lighter, in both themes
+
+In light mode the page is the manila folder and panels are sheets laid on it; in dark mode the
+same ladder runs from near-black upward. The direction never inverts, so elevation reasoning is
+identical in both themes.
+
+| Token | Light | Dark | Role |
 |---|---|---|---|
-| `--surface-0` | `#0b101e` | page background (formerly --bg); also styles.backgroundColorDark in Devvit | base |
-| `--surface-1` | `#131a2e` | panels: board frame, clue-panel, casebar (formerly --panel) | - |
-| `--surface-2` | `#1a2340` | cells, cards, inputs, tabs (formerly --panel-2) | - |
-| `--surface-3` | `#1f2846` | hover, result modal, elevated elements | muted holds 4.73:1 - ladder limit |
-| `--surface-sunken` | `#10162a` | clue container, controls bar (formerly hardcoded) | - |
+| `--paper` | `#BEAD8C` | `#0A0907` | page ground (the folder / the desk) |
+| `--sheet` | `#F8F4EB` | `#2A2419` | the primary surface: the case file, panels, board |
+| `--sheet-raised` | `#FFFDF8` | `#3B3422` | raised: result sheet, hover, hint slip |
+| `--groove` | `#D9CFBA` | `#16130E` | recessed strips: meter bar, controls, `th`, empty chip |
 
-Do not go lighter than `#1f2846`: on `#222c4e` muted drops to 4.46:1.
+Four steps, not five. `--groove` is a *recess*, not a fifth elevation — it is always darker than
+`--sheet`, which is why a control bar sitting in it reads as pressed into the page. In light mode
+it is now *lighter* than `--paper`: the desk and a recess in a sheet lying on it are different
+materials, and the ordering that matters is the one within the app (`groove < sheet < raised`).
 
-**Text - exactly 3 steps (collapse the 4-gray scale, EXCLUDE `#566083` from text roles):**
+**The two ceilings, because they decide the rest.** A surface that carries `--ink-3` as text at AA
+cannot go below relative luminance .583, which floors `--groove` and caps `--sheet`/`--groove` at
+**1.51:1**. `--sheet-raised` is capped by white, so `--sheet`/`--sheet-raised` can never pass
+~**1.1:1**. Both of those pairs are therefore drawn with a `--rule-strong` boundary (and, where a
+sheet genuinely floats, `--shadow-1`) rather than by lightness. Dark is tighter still: with
+`--ink-3` and `--stamp` both needing AA on the topmost surface, all four dark surfaces live inside
+luminance 0–.035 and no dark pair can exceed ~1.6:1. Dark spends its budget on lines instead,
+where it has room light does not (`--rule` reaches 1.84:1 and `--rule-strong` 4.58:1 on the sheet).
 
-| Token | Hex | Role | Contrast |
+**One rule follows from the darkened desk and it is not negotiable: nothing but `--ink` may be set
+on `--paper`.** `--ink-2` is 4.43:1 there and `--ink-3` is 3.40:1 — fine as a boundary, short of AA
+as text. No component does it, and the screenshot harness measures it on every frame it shoots and
+prints any offender rather than trusting the rule (§7 — it reports, it does not fail the run, so a
+human still has to read the `REPORT` lines).
+
+### 1.1a Elevation — `--shadow-1`
+
+```css
+/* light */
+--shadow-1: 0 1px 0 color-mix(in srgb, var(--ink) 16%, transparent),
+            0 3px 8px color-mix(in srgb, var(--ink) 10%, transparent);
+/* dark — same geometry, inverted ingredient */
+--shadow-1: 0 1px 0  color-mix(in srgb, var(--paper) 70%, transparent),
+            0 3px 10px color-mix(in srgb, var(--paper) 55%, transparent);
+```
+
+Reinstates the one thing decision 57 deleted wholesale, and only that: one hard offset and one
+soft blur, mixed out of the theme's own darkest token, so the shadow darkens the paper the sheet is
+lying on instead of adding a grey. Light mixes out of `--ink` at 16%/10% with an 8px blur; dark mixes
+out of `--paper` at 70%/55% with a 10px blur, because on a near-black ground a 10%-of-white wash is
+invisible — the drop has to deepen the surface below, not tint it. Same idea, inverted ingredient.
+
+The anti-goal in §0 stands — this is a printed drop, not a photographic one, there
+is no spread and no halo past the blur. Used **only** where a sheet floats over another surface: the
+result sheet, the standings sheet, the app card and the ledger from 720px, the splash card, the
+load/error card, the hint slip, the toast, the first-run card, the coach tip. Never on a
+full-bleed phone layout — there is no desk under it to cast onto.
+
+### 1.2 Ink — three reading steps and one inverse
+
+| Token | Light | Dark | Role |
 |---|---|---|---|
-| `--text` | `#e8ebf5` | primary | 15.93:1 on surface-0, 12.98:1 on surface-2 |
-| `--text-2` | `#c6cbdc` | clue text, table values, poll percentages | 9.55:1 on surface-2 |
-| `--muted` | `#8b93ab` | captions, counters, hint text, footer, grid-help | 6.20/5.65/5.05/4.73 on L0-L3 - AA everywhere |
-| `--on-accent` | `#0b101e` | text on ANY colored fill (orange/green/red/yellow/blue) | 8.20:1 on orange, 8.38 on green, 6.21 on red, 13.16 on yellow |
+| `--ink` | `#1B1815` | `#F2ECE0` | primary text, filled CTA, "circled" ring, filled ticks |
+| `--ink-2` | `#4A433A` | `#D2C8B5` | clue text, secondary values, ghost-button label |
+| `--ink-3` | `#5C5446` | `#A89E87` | caps labels, captions, muted/satisfied text, outlined stamp |
+| `--ink-inv` | `#FFFDF8` | `#16130E` | text on any ink fill |
+| `--strike` | `#4A433A` | `#D2C8B5` | the pen stroke over a ruled-out candidate |
 
-`#566083` is allowed only as decorative graphics with no meaning. White text on colored fills is forbidden (on red 3.05:1 - fail, on yellow 1.44:1).
+Light is unchanged. Dark moves up one notch across the board because `--sheet-raised` moved up:
+`--ink-3` has to clear 4.5:1 on it (it does, at 4.65), and `--ink-2` follows so the three reading
+steps stay three (1.41 and 1.60 between neighbours, against 1.57/1.79 before — tighter, and paid
+for by surfaces that are actually distinguishable).
 
-**Borders:**
+Exactly three reading steps. There is no fourth grey. `--strike` is `--ink-2`'s value but a
+separate token because it lands on coat washes, not on paper (§1.6) — keeping it separate is what
+lets the dark theme raise it without touching body text.
 
-| Token | Hex | Role | Contrast |
+### 1.3 Lines
+
+| Token | Light | Dark | Role |
 |---|---|---|---|
-| `--border` | `#26304f` | decorative dividers (1.33:1 - legal only as decor) |
-| `--border-strong` | `#39466e` | borders of interactive grid cells (visibility, not state) |
-| `--border-active` | `#6b76a0` | border = the sole indicator of state/interactivity | 3.89:1 on surface-1 - passes SC 1.4.11 |
-| `--border-hover` | `#5f70ad` | hover borders of cells/chips | ~3:1 |
+| `--rule` | `#BEB299` | `#554D3D` | decorative hairline: row dividers only. **Carries no meaning.** |
+| `--rule-strong` | `#655B47` | `#968B75` | structure + every control boundary: chips, secondary buttons, table head, **board grid**, panel heads, the sidebar edge, the facts strip, every `--groove` edge |
 
-**Accents:**
+`--rule-strong` clears 3:1 on **all four** surfaces in both themes, so a boundary drawn with it is
+always a valid SC 1.4.11 indicator wherever it lands. `--rule` never is — never use it to mark a
+state or delimit a control, and never to separate two blocks (decision 72: the board grid drawn in
+`--rule` was a 1.48:1 hairline, which is a grid you have to take on faith).
 
-| Token | Hex | Role | Contrast |
+### 1.4 The accent — archive red
+
+| Token | Light | Dark | Role |
 |---|---|---|---|
-| `--orange` | `#ff8c42` | ONLY primary CTA (fill), brand echoes (logo, CASE #N), progress | 7.48:1 on surface-1 as text |
-| `--orange-dim` | `#b35a20` | non-text only: state borders/fills (3.62:1 - forbidden as text) |
-| `--green` | `#35c46f` | confirmed: ✓, st-ok num, yes cells | 7.64:1 on surface-1 |
-| `--red` | `#ff5a5f` | ONLY errors: violated clue, err-toast, warn-hover | 5.66:1 on surface-1 |
-| `--red-soft` | `#c96b6e` | ~~routine ✕ cross-out in "Tabs" mode~~ - **removed along with "Tabs" mode** |
-| `--strike` | `#6b7590` | chip strike-through line in "Single board" | 3.05:1 against chip background #202a4c |
-| `--blue` | `#4f9cff` | focus-visible outline, info-toast | 6.20:1 on surface-1 |
-| `--purple` | `#a78bfa` | tomorrow block | 6.35:1 |
-| `--yellow` | `#ffd166` | EXCLUSIVELY hint semantics (hint-box, hint-target) | 11.99:1 on surface-1 |
+| `--stamp` | `#9E2B1C` | `#E8886F` | the marks made *on* the file |
+| `--stamp-ink` | `#FFFDF8` | `#16130E` | text on a solid stamp fill |
+| `--stamp-wash` | `#E4C8BD` | `#483427` | background of a contradicted clue row |
 
-**Semantic backgrounds (move hardcoded into tokens):** `--hint-bg #241d10` (yellow pair - hint only), `--ok-bg #123524` + `--ok-border #1f6b40`, `--err-bg #241012` + `--err-border #5e2326`, `--info-bg #10223a`.
+The dark red is lighter than it was (`#E27A62` → `#E8886F`) for one measured reason: the `CLOSED`
+stamp sits on `--sheet-raised`, and lifting that surface to give the result card an edge would
+have taken the stamp to 4.4:1. It is 4.81:1 now. The washes are 22% of `--stamp` over `--sheet`
+in light and 16% in dark — the dark alpha came down because the flag line is `--stamp` *on* the
+wash, and at 22% that pair fell to 4.05:1.
 
-**Flairs (Okabe-Ito, CVD-safe):**
+**Rule of one.** Red appears **at most once per screen**, always meaning one thing on that screen:
 
-| Token | Hex | Role | Contrast |
+| Screen | The one red mark |
+|---|---|
+| splash | the case stamp block — `CASE 047` + the tier stamp (identity) |
+| game | the contradicted clue: left rule, number box, flag line |
+| result | the `CLOSED` stamp (by definition no clue is contradicted here) |
+| error | the `FILE UNAVAILABLE` stamp |
+
+Consequence: the case number is **red on the splash and ink in the game chrome**. That is not an
+inconsistency — `.casestamp` is one component with two variants, `hero` and `inline`. On the splash
+the identity is the message; in the game the state is, and red must belong to the clue panel alone.
+The only other red is `--stamp` on `:hover` of the destructive "start over" button — transient,
+absent on touch.
+
+### 1.5 Evidence — the coats (Okabe-Ito)
+
+| Token | Light | Dark | Letter | Letter contrast |
+|---|---|---|---|---|
+| `--coat-r` | `#D55E00` | `#D55E00` | **R** `--coat-r-ink` `#100D0A` | 5.01:1 |
+| `--coat-b` | `#0072B2` | `#56B4E9` | **B** light `#FFFDF8` / dark `#100D0A` | 5.10 / 8.40:1 |
+| `--coat-g` | `#009E73` | `#009E73` | **G** `#100D0A` | 5.66:1 |
+| `--coat-p` | `#CC79A7` | `#CC79A7` | **P** `#100D0A` | 6.33:1 |
+
+Two deliberate asymmetries, both forced by the numbers:
+
+- **Blue differs per theme.** Okabe-Ito's `#0072B2` needs a *light* letter (dark letter is 3.37:1 —
+  fail) and is invisible as a fill on a dark sheet; the palette's own sky blue `#56B4E9` is right
+  in dark but washes out on cream. So: `#0072B2` in light, `#56B4E9` in dark, and the letter ink is
+  a per-coat token rather than a global one.
+- **The letter ink is per-coat, not global.** Three coats take dark, blue-in-light takes paper.
+  Forcing one letter colour on all four would break at least one of them.
+
+### 1.6 Crossed-out washes
+
+A ruled-out candidate keeps its hue at reduced strength so you can see *what* was crossed out —
+the P0 the old spec kept failing. 22% coat over `--sheet` in light, 28% in dark.
+
+| Token | Light | Dark |
+|---|---|---|
+| `--coat-r-out` | `#F0D3B7` | `#5A3412` |
+| `--coat-b-out` | `#C1D7DE` | `#364C53` |
+| `--coat-g-out` | `#C1E1D1` | `#1E4632` |
+| `--coat-p-out` | `#EED9DC` | `#573C41` |
+
+The letter on a wash is `--ink` (11.8–13.1:1 light, 7.7–9.2:1 dark) — see §3 for why the letter,
+not the wash, is the identity channel. Recomputed 2026-08-08 over the moved `--sheet`; the
+alive-vs-crossed state channel (§3's fourth table) is unchanged in light and holds
+ΔE00 19.6–38.0 across every CVD type.
+
+### 1.7 Type — three families, eight steps
+
+```css
+--font-sans:  -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+--font-mono:  ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+--font-serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia,
+         "Times New Roman", serif;
+```
+
+No webfonts, no CDN — the Devvit webview is isolated and a failed font request is a layout bug.
+
+| Family | Where | Never |
+|---|---|---|
+| **sans** | everything read as prose: clue text, buttons, suspect names, body | numbers you compare |
+| **mono** | case numbers, time, counters, tallies, caps labels, stamps, table figures, column heads. Always with `font-variant-numeric: tabular-nums` | clue text |
+| **serif** | **two places only**: the case title and the result hero subtitle | anything else |
+
+The serif is the whole "dossier" signal and it costs nothing. It is deliberately confined to two
+strings; a third use turns the file into a brochure. On Android the stack falls through to Noto
+Serif and metrics shift ~1px — acceptable, because both uses are single lines with generous
+leading, not multi-line copy.
+
+| Token | px | LH | Role |
 |---|---|---|---|
-| `--flair-r` | `#D55E00` | Red (vermillion) | 4.47:1 on surface-1 |
-| `--flair-b` | `#56B4E9` | Blue (sky blue) | 7.49:1 |
-| `--flair-g` | `#009E73` | Green (bluish green) | 5.05:1 |
-| `--flair-p` | `#CC79A7` | Purple (reddish purple) | 5.65:1 |
+| `--fs-2xs` | 11 | 1 | mono caps labels, stamps, tallies, flag line (`letter-spacing: .12em`, weight 700–800) |
+| `--fs-xs` | 12 | 1.4 | captions, table figures, meter values |
+| `--fs-sm` | 13 | 1.4 | clue text, chip letters, dense UI |
+| `--fs-base` | 15 | 1.5 | body, buttons, suspect names (14 at `max-height: 700px`) |
+| `--fs-md` | 17 | 1.2 | case title, item emoji, fact values |
+| `--fs-lg` | 21 | 1.2 | splash title on a phone |
+| `--fs-xl` | 26 | 1.15 | splash title, result hero on short viewports |
+| `--fs-2xl` | 34 | 1 | result hero time (mono, tabular) |
 
-The red/green and blue/purple pairs are distinguishable under deutan/protan (unlike the current emoji: dist 54 and 27 against a threshold of ~60). Do NOT use OI blue `#0072B2` and Tol red `#CC3311` - on surface-2 they drop below 3:1.
+`--ls-caps: .12em` on every uppercase mono label. That letter-spacing is doing structural work —
+it is what separates "a label" from "shouting", and it is why caps labels can be 11px and still scan.
 
-### 1.2 Type scale - 7 steps, integer px, all via var()
+### 1.8 Spacing — 4pt
 
-| Token | px | LH | Role (replacements) |
+`--sp-0: 2px` (micro only) · `--sp-1: 4` · `--sp-2: 8` · `--sp-3: 12` · `--sp-4: 16` ·
+`--sp-5: 24` · `--sp-6: 32` · `--sp-7: 48`. No other values.
+
+### 1.9 Radii — two
+
+`--r-0: 0` · `--r-1: 2px`. Sheets, panels, table cells, the board, the envelope: **0**.
+Chips, buttons, inputs, stamps, the `You` tag: **2px**. Nothing else. There is no pill, no 8, no 12,
+no 16. Paper is cut, not moulded — and the flat corner is what makes the ruled grid read as a form.
+
+### 1.10 Sizing
+
+`--chip` — 44px ≥720px wide · 34px on a short wide viewport · 28px <720px · 26px on a short phone.
+`--tap` — 44px, 40px on short viewports; the minimum height of every `.btn`.
+
+---
+
+## 2. Contrast table
+
+**These numbers are read off the tokens that actually ship.** The source of truth is
+[tokens.css](../src/client/tokens.css); the table below is transcribed from a machine run of
+`plans/assets/proto/04-polish/verify-contrast.py`, which parses that file directly and feeds every
+pair through [10-design-spec-wcag.py](10-design-spec-wcag.py). Nothing here is inherited from the
+legacy spec, and exactly one row is computed outside the driver's own arrays — `--rule-strong` on the
+coat washes (§2.3), with the same module. Full run:
+[10-design-spec-contrasts.txt](10-design-spec-contrasts.txt) — tracked next to this file, so every
+number in §2 and §3 is checkable from a fresh clone. Regenerated with
+
+```bash
+# ⚠ the DRIVER is internal tooling and is not in the public repo — see §7
+python3 plans/assets/proto/04-polish/verify-contrast.py > docs/10-design-spec-contrasts.txt
+```
+
+after **any** edit to `tokens.css`; then re-transcribe §2 and §3. Current values: the surface-ladder
+repair of 2026-08-08 (§1's revision note).
+
+### 2.1 Surfaces — a floor per pair
+
+The check whose absence let the first ladder through: text contrast was audited, surface-to-surface
+contrast was not, so four surfaces sitting inside 1.09–1.46:1 of each other passed a full audit while
+the result card had no visible edge. Each pair carries its own floor, set by how much work the
+boundary has to do.
+
+| Pair | Light | Dark | Floor | What draws the edge |
+|---|---|---|---|---|
+| `--paper` / `--sheet` | 2.00 | 1.29 ᶜ | 1.80 | 1px `--rule-strong` + `--shadow-1` |
+| `--paper` / `--sheet-raised` | 2.16 | 1.61 ᶜ | 1.80 | 1px `--rule-strong` + `--shadow-1` |
+| `--sheet` / `--groove` | 1.41 | 1.20 ᶜ | 1.35 | 1px `--rule-strong` on every groove edge |
+| `--groove` / `--sheet-raised` | 1.52 | 1.50 | 1.35 | inset 3px `--ink` bar (your row); 1px `--rule-strong` (rail) |
+| `--sheet` / `--sheet-raised` | 1.08 | 1.25 | 1.00 | capped by white — 1px `--rule-strong`, a 3px `--ink-3` left rule, `--shadow-1` |
+| `--paper` / `--groove` | 1.42 | 1.07 ᶜ | 1.20 | 1px `--rule-strong` |
+
+ᶜ **A cap, not a failure.** Dark cannot buy these steps: with `--ink-3` and `--stamp` both owing AA on
+the topmost surface, all four dark surfaces live inside luminance 0–.035 and no dark pair can exceed
+~1.6:1. Every capped pair names the line that carries the boundary instead, and the run refuses to
+silently drop such a pair from the table.
+
+### 2.2 Text — AA (≥4.5:1)
+
+| Pair | Light | Dark |
+|---|---|---|
+| `--ink` on `--paper` | 8.03 | 16.92 |
+| `--ink` on `--sheet` | 16.10 | 13.08 |
+| `--ink` on `--sheet-raised` | 17.39 | 10.50 |
+| `--ink` on `--groove` | 11.43 | 15.75 |
+| `--ink` on `--stamp-wash` | 11.19 | 9.94 |
+| `--ink-2` on `--sheet` | 8.88 | 9.28 |
+| `--ink-2` on `--sheet-raised` | 9.59 | 7.45 |
+| `--ink-2` on `--groove` | 6.30 | 11.18 |
+| `--ink-3` on `--sheet` | 6.80 | 5.79 |
+| `--ink-3` on `--sheet-raised` | 7.35 | **4.65** |
+| `--ink-3` on `--groove` | **4.83** | 6.97 |
+| `--ink-inv` on `--ink` (primary button) | 17.39 | 15.75 |
+| `--ink-inv` on `--ink-2` (button hover) | 9.59 | 11.18 |
+| `--stamp` on `--sheet` | 6.79 | 6.00 |
+| `--stamp` on `--sheet-raised` | 7.34 | **4.81** |
+| `--stamp` on `--groove` | **4.82** | 7.22 |
+| `--stamp` on `--stamp-wash` | **4.72** | **4.56** |
+| `--stamp-ink` on `--stamp` (solid stamp) | 7.34 | 7.22 |
+| `--sheet` on `--ink-3` (satisfied clue number) | 6.80 | 5.79 |
+| letter on `--coat-r` | 5.01 | 5.01 |
+| letter on `--coat-b` | 5.10 | 8.40 |
+| letter on `--coat-g` | 5.66 | 5.66 |
+| letter on `--coat-p` | 6.33 | 6.33 |
+| `--ink` on `--coat-*-out` (letter on a wash) | 11.82 – 13.13 | 7.71 – 9.23 |
+
+**`--ink-2` and `--ink-3` on `--paper` are absent from this table on purpose.** The darkened desk puts
+them at 4.43:1 and 3.40:1 in light — fine as a boundary, short of AA as text — which is exactly the
+price the ladder repair paid. The rule that follows (*nothing but `--ink` on `--paper`*, §1.1) is not
+left to discipline: the screenshot harness measures it on every frame it shoots and prints any
+offender (`onPaper` in
+`plans/assets/proto/04-polish/fixture-server.ts`).
+
+The bold cells are the binding constraints. In light they are why `--ink-3` is `#5C5446` and not the
+`#635B4F` the eye first reaches for — that one lands at 4.33:1 on the new `--groove`, a fail. In dark
+they are what stops `--sheet-raised` at `#3B3422`: one step lighter and `--ink-3` drops under AA on it.
+
+### 2.3 Non-text — SC 1.4.11 (≥3:1)
+
+| Pair | Light | Dark |
+|---|---|---|
+| `--rule-strong` on `--paper` | 3.04 | 5.92 |
+| `--rule-strong` on `--sheet` | 6.09 | 4.58 |
+| `--rule-strong` on `--sheet-raised` | 6.58 | 3.67 |
+| `--rule-strong` on `--groove` | 4.33 | 5.51 |
+| `--rule-strong` on the coat washes | 4.47 – 4.97 | 2.70 – 3.23 † |
+| `--ink` ring ("circled") on `--sheet` | 16.10 | 13.08 |
+| `--ink` fill (histogram bar, vote segment) on `--sheet-raised` | 17.39 | 10.50 |
+| `--ink` inset bar on `--groove` | 11.43 | 15.75 |
+| `--strike` on the coat washes | 6.52 – 7.24 | 5.47 – 6.55 |
+| `--strike` on `--groove` | 6.30 | 11.18 |
+| `--stamp` 3px left rule on `--sheet` | 6.79 | 6.00 |
+
+† In dark the chip border is lower-contrast against its own fill than against the surrounding
+sheet. That is fine: SC 1.4.11 asks for contrast between the control's boundary and the
+**adjacent** background, which is `--sheet` (4.58:1 ✓), not its own fill. This row is the one pair
+not in `verify-contrast.py`'s own arrays; it is computed with the same module
+(`docs/10-design-spec-wcag.py`, `cr()`) over the same parsed tokens.
+
+### 2.4 Decorative — deliberately below 3:1
+
+`--rule` is the only token allowed under the non-text floor, and it may never be the sole carrier of
+information. On `--sheet` it reads 1.91 (light) / 1.84 (dark); on `--sheet-raised`, 2.06 / 1.48. Both
+went **up** in the repair — 1.48 and 1.30 were hairlines nobody could see, so the rows they divide now
+read as rows without the line ever becoming an indicator.
+
+---
+
+## 3. CVD
+
+Verified two ways: numerically (Viénot/Brettel LMS simulation → CIEDE2000) and by simulating the
+actual rendered frames — `plans/assets/shots/03b-design-system/cvd/*.png` in a working checkout
+(internal, not in the published repo — §7), four columns per frame
+(normal / deutan / protan / tritan). The ΔE tables below are transcribed from the same run as §2
+(`plans/assets/proto/04-polish/verify-contrast.py`, raw output in
+[10-design-spec-contrasts.txt](10-design-spec-contrasts.txt)) and moved with the surface repair,
+because the washes are mixed over `--sheet`.
+
+**Coat fills, worst pair, ΔE00**
+
+| | normal | deutan | protan | tritan |
+|---|---|---|---|---|
+| light | 37.0 | 15.7 (G/P) | 16.5 (B/P) | 10.7 (B/G) |
+| dark | 34.7 | 15.7 (G/P) | 13.6 (B/P) | 10.4 (B/G) |
+
+Comfortably separable everywhere. For comparison, the emoji circles this palette replaced
+(decision №16) sat at ΔE 27–54 in *normal* vision and collapsed under deutan.
+
+**Crossed-out washes, worst pair, ΔE00**
+
+| | normal | deutan | protan | tritan |
+|---|---|---|---|---|
+| light | 11.2 (B/G) | **2.1** (G/P) | 4.9 (G/P) | **1.9** (B/G) |
+| dark | 15.9 (B/G) | **3.8** (G/P) | 7.2 (B/P) | **4.2** (B/G) |
+
+**Stated honestly: the four washes are not distinguishable from each other under deutan or tritan.**
+Desaturated pastels always collapse; no palette fixes this. The wash is a normal-vision
+convenience, nothing more. Identity is carried by two CVD-immune channels that are always present:
+
+1. **the letter R / B / G / P** — `--ink` at 11.8–13.1:1 on every light wash and 7.7–9.2:1 on every
+   dark one, so it clears AA on all eight with room to spare;
+2. **fixed position** — the four coats are always rendered left-to-right R B G P, in every cell,
+   in both the wide and the narrow board.
+
+**The state channel — alive vs crossed, same coat, ΔE00**
+
+| coat | normal | deutan | protan | tritan | luminance ratio |
+|---|---|---|---|---|---|
+| R | 31.8 | 25.8 | 31.4 | 30.2 | 2.71:1 |
+| B | 35.7 | 38.0 | 35.5 | 33.5 | 3.47:1 |
+| G | 26.1 | 24.4 | 22.2 | 25.4 | 2.44:1 |
+| P | 26.4 | 19.6 | 25.0 | 24.3 | 2.27:1 |
+
+(light theme). Dark's luminance ratios are higher on every row — 2.81–3.93:1 — and its ΔE00 is
+higher on every row **but R**, which lands at 28.6 / 31.4 / 24.8 / 28.0 and so dips just under light
+on normal, protan and tritan. The weakest cell in either theme is light P under deutan at 19.6, still
+an order above the wash-vs-wash collapse it has to beat. This is the channel that actually matters during
+play — "is this candidate still in?" — and it survives every CVD type because it is a lightness
+jump, reinforced by the strike line. Plus, greyscale-safe by construction.
+
+**Nothing in the interface is signalled by colour alone.** The audit, exhaustively:
+
+| State | Colour | Non-colour duplicate(s) |
+|---|---|---|
+| candidate ruled out | wash instead of fill | diagonal strike + lightness jump + `aria-pressed` |
+| candidate deduced | none — the ring is ink | 2px ink ring, offset 2px |
+| clue satisfied | none | struck-through text + filled number box + muted |
+| clue contradicted | red rule/box/wash | 3px left rule + inverted number box + the literal line "Contradicted by the board" |
+| suspect row solved | none | hollow □ → filled ■ next to the name |
+| progress | none | 12 countable squares + `NN/12` |
+| your leaderboard row | none | inset ink bar + bold + a `You` tag |
+| your histogram bar | none | filled vs hollow + a `YOU` label under the axis |
+| difficulty vote shares | none | solid / hatched / empty + printed percentages |
+
+---
+
+## 4. Components
+
+### 4.1 `.stamp`
+Mono, 11px, 800, `letter-spacing: .12em`, uppercase, `1.5px solid currentColor`,
+`padding: 4px 6px`, `border-radius: 2px`, **`transform: rotate(-3deg)`**. `.lg` = 13px / 2px border.
+Default colour `--ink-3`; `.red` = `--stamp`; `.solid` fills with `--stamp` and uses `--stamp-ink`.
+Uses: the tier stamp (`MEDIUM` + its `Level 2 of 3` line), `CLOSED`, `NOT RECORDED`, `WARM-UP SOLVED`,
+`FILE UNAVAILABLE`. `SEALED` went with the sealed envelope (dec. 79) and no longer exists.
+Nothing else may be a stamp — a stamp
+that shows up on a routine label stops being a stamp.
+
+### 4.2 `.caps`
+Mono 11/700/`.12em`/uppercase/`--ink-3`. This is the replacement for every chrome emoji:
+`CLUES`, `TIME`, `SOLVED`, `HINT 1 OF 1 · REVEALED`, `SOLVE TIMES TODAY · 142 DETECTIVES`.
+
+### 4.3 Buttons
+
+| Variant | Fill | Border | Label |
 |---|---|---|---|
-| `--fs-2xs` | 11 | 1.2 | ONLY uppercase micro-labels with letter-spacing .5-1px, weight 600+: panel headings, hint-tag, badge, .by, .cnt (10/10.5 → 11) |
-| `--fs-xs` | 12 | 1.5 on wrap | captions, counters, grid-help, footer, sub (11.5/12 → 12) |
-| `--fs-sm` | 13 | 1.45-1.5 | base: CLUES, cells, result table (12.5/13 → 13) |
-| `--fs-base` | 14 | 1.2 (flex centering) | buttons, case title, panel names (13.5/14/15 → 14) |
-| `--fs-md` | 17 | 1.2 | column icons, large numbers, cell marks (17/21 → 17… the ✕/✓ mark may be 20) |
-| `--fs-lg` | 20 | 1.2 | logo, h3 hero of result stats (20/21 → 20) |
-| `--fs-xl` | 24 | 1.2 | h2 of the result screen |
+| `--primary` | `--ink` | `--ink` | `--ink-inv` |
+| `--secondary` | none | `--rule-strong` | `--ink` |
+| `--ghost` | none | none | `--ink-2`; hover fills `--groove` |
+| `--icon` | 44×44, inline SVG 18px, `stroke-width: 1.6`, `currentColor` | | |
+| `--danger` | ghost; `:hover` turns border+label `--stamp` | | |
 
-Base: `body { font-size: 13px; line-height: 1.45; }`. Special off-scale exception: `@media (pointer: coarse) { .submit-row input { font-size: 16px } }` - otherwise iOS auto-zooms the page on focus. `font-variant-numeric: tabular-nums` - on the timer, counters, poll percentages, result stats.
+One filled button per screen, maximum. On the game screen the filled button appears only at
+12/12 (`See results`); before that the right-hand action is `Reveal a cell`, secondary — so the
+"filled = the case is closable" signal is earned, not decorative.
 
-### 1.3 Spacing - 4pt grid
+Line icons, inline SVG only (undo / restart / help / close). No icon fonts, no emoji: `⏱`
+without VS16 rendered as tofu in the Firefox webview in the legacy build — SVG cannot.
 
-`--sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 24px; --sp-6: 32px`. 2px is allowed as a micro-gap. Mapping of current values: 3,5→4; 6,7→8; 9,10,11→8/12; 13,14→12/16; 18→16; 22,26→24; border-spacing 5→4. Panel padding: 16px desktop / 12px mobile.
+### 4.4 The board
 
-### 1.4 Radius - 4 tokens + nesting rule
+A ruled form, `border-collapse: collapse`, every cell bounded by `--rule`, headers in `--groove`.
 
-`--r-s: 8px` (chip-m, tab, viewswitch, HUD chips; 9→8), `--r-m: 12px` (cell, bcell, btn, toast, poll-opt, input, card; 10→12), `--r-l: 16px` (board frame, result modal; 18→16), `--r-pill: 999px` (diff, s-chip, clue number instead of 50%). Nesting: inner = outer - padding (cards inside the modal at outer 16px and padding 24px → corners --r-s or 0, not 12px).
+- **Column heads** (`COAT / TIME / ITEM`) — `.caps`.
+- **Row head** — suspect name, sans 600, preceded by an 8px box: hollow `--rule-strong` while
+  open, filled `--ink` when all three of that suspect's cells are deduced.
+- **Cell** — a flex row of 4 chips, `gap: 4px` (3px narrow).
 
-### 1.5 Touch/misc
+**Chip**, `--chip` square, `2px` radius, `1px --rule-strong`, mono 13/800:
 
-Minimums: buttons min-height 44px; clue rows min-height 44px on touch; expand tap targets <44px with `@media (pointer:coarse) { .x { position:relative } .x::after { content:''; position:absolute; inset:-8px } }`. Give all interactives `touch-action: manipulation`. Globally `:root { color-scheme: dark }` (dark UA scrollbars/checkboxes), `:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px }`, `body { overflow-x: hidden }` (safeguard).
+| State | Rendering |
+|---|---|
+| alive, coat | full-saturation coat fill, per-coat letter ink, border = the coat colour |
+| alive, time | `--sheet`, mono `09/12/15/18` in `--ink` |
+| alive, item | `--sheet`, item emoji at 17px |
+| ruled out | `--coat-*-out` wash (coats) or `--groove` (time/item); letter/glyph stays; emoji at `opacity: .55`; **2px `--strike` at −38°**, drawn as `::after` outside any opacity |
+| deduced (sole survivor) | `outline: 2px solid --ink; outline-offset: 2px` — "circled in pen" |
 
----
+Every chip carries `::before { inset: -6px -3px }` (−8/−4 narrow) to lift the touch target toward
+44px without growing the visual grid.
 
-## 2. Colorblind flairs: what the chip looks like
+**Narrow board (<720px).** The table is replaced by per-suspect blocks: a `--groove` name row,
+then the three categories side by side. Same chips, same states, same order — only the frame changes.
 
-Replace the bare emoji 🔴🔵🟢🟣 with a CSS chip (`chipLabel` for flair, index.html:732; grid :770-784):
+### 4.5 Clue rows
 
-- Circle (30×30 base / no smaller than 30 on mobile), background - the flair color from Okabe-Ito (`--flair-r/b/g/p`).
-- Inside - **the letter R / B / G / P**, weight 700, `--fs-sm`, color `--on-accent #0b101e` (dark letter on all four - all backgrounds are light, contrast ≥4.5:1). The letter is the primary channel: the flair names are already Red/Blue/Green/Purple, it works under any type of CVD and in grayscale.
-- In clue text the emoji may stay (there the word "red flair" is nearby - duplication already exists), or replace it with the same 14px inline chip for consistency.
-- In the "Investigation summary" table - chip + word, `white-space: nowrap`.
+`border-left: 3px solid transparent`, a 17px number box, sans 13/1.4 in `--ink-2`.
 
-**Struck-out chip state (critical, fixes P0):** opacity `.55` (not .3), **remove `grayscale`** entirely - color+letter must stay recognizable; move the strike-through line out from under opacity: draw it as a pseudo-element on the `.bcell` parent or set a direct color `--strike #6b7590`, 2px, without inheriting transparency (3.05:1 against the chip background). Result: it is visible WHAT is struck out and WHICH flair it is.
+| Status | Rendering |
+|---|---|
+| open | hollow number box (`--rule-strong`), text `--ink-2` |
+| satisfied | number box filled `--ink-3` with `--sheet` numeral; text `--ink-3`, `line-through` |
+| contradicted | left rule `--stamp`, number box filled `--stamp`, row background `--stamp-wash`, text at full `--ink`, plus a mono caps line **"Contradicted by the board"** |
 
----
+Note the direction: satisfied clues *recede*; the contradicted one is the only clue at full ink
+strength. On paper you cross off what is done and circle what is wrong — the hierarchy does the
+same work the old green/red badges did, with no hue at all except the single red.
 
-## 3. Component changes
+The panel head carries the tally: `4 SATISFIED · 6 OPEN`, or `1 CONTRADICTED · 4 SATISFIED` with the
+contradiction count in `--stamp`.
 
-### P0 - blockers (mobile breaks or an action is unavailable)
+### 4.6 Progress
 
-1. **Grid, mobile scroll** → `.grid-wrap { justify-content: flex-start }` in the MQ (currently center + overflow clips suspect names UNREACHABLY, scrollLeft max 66 of 132); pin the names: `th.rowh { position: sticky; left: 0; background: var(--surface-1); z-index: 2 }`. On desktop, center via `table { margin: 0 auto }` (auto margins collapse on overflow). Scrollbar: `scrollbar-width: thin; scrollbar-color: var(--border) transparent` + webkit equivalent (height 6px) - removes the white system bar. Clipping affordance: right edge-fade `mask-image: linear-gradient(90deg, #000 calc(100% - 18px), transparent)`, remove via class when scrolled to the end.
-2. **Header/HUD mobile** → `.top { flex-wrap: wrap; row-gap: var(--sp-1) }`, `.brand .sub { display: none }` in the MQ, `.hud { width: 100%; justify-content: flex-end; gap: 6px }`, chips `padding: 4px 8px; font-size: var(--fs-xs)` - currently the HUD overflows by 110px past the edge and hides progress and hints.
-3. **Confirmation without right-click (iOS tap-only)** → for `pointer: coarse` add long-press (pointerdown + ~450ms → applyMove(...,2), cancel on pointerup/pointermove) and/or a tap cycle `· → ✕ → ✓ → ·` in "Tabs" mode; substitute the grid-help text via `matchMedia('(pointer:coarse)')`: "tap - cross out · tap the pulsing one - ✓" (one line), removing "right-click". This is a minimal JS edit of input handlers, not logic.
-4. **Struck-out chips of "Single board"** → see section 2: replace opacity .3+grayscale(.9) (line contrast 1.43:1, chip vs background 1.02:1) with opacity .55 without grayscale + `--strike` line outside opacity + letter in the chip.
-5. **CVD flair chips** → see section 2 (letters R/B/G/P on Okabe-Ito backgrounds).
+12 squares, 7×7, 3px gap, hollow `--rule-strong` → filled `--ink`, plus `NN/12` in mono tabular.
+Countable at a glance, no hue, and it answers plan 03's C2 ("`✔ 5/12` is just a counter") without
+adding a colour.
 
-### P1 - hierarchy, readability, touch
+### 4.7 Hint slip
 
-6. **Orange = CTA only.** The only orange-filled button on the game screen is "Check case". The "CLUES" heading → `--muted` uppercase `--fs-2xs`; `.tab.active` → background `--surface-2` + orange text + 2px bottom border `--orange` (instead of a fill that duplicates the CTA); accent-color of the assistant checkboxes → `--muted`; active viewswitch → background `--surface-2`, border `--border-active`, text `--text` (currently it shares the warm pair #2a2312+yellow with hint semantics). CASE #N stays orange - a brand echo and the ritual issue number.
-7. **CTA state = progress indicator** (Connections pattern): until the board is 12/12 - "Check case" in a muted state (fill `--orange-dim`, text `--on-accent`, cursor default is acceptable - this is not disabled in the WCAG sense, but behave as now); at 12/12 - full `--orange` fill + a light pulse. Only a CSS class driven by the already existing counter.
-8. **Controls: button hierarchy.** Primary = "Check case" (filled `--orange`, text `--on-accent`, min-height 44px). "Hint" = secondary (`--surface-2` + 1px `--border-active`). "Restart", "Undo" = ghost (transparent background, text `--muted`); red on "Restart" - only on hover/confirm. Mobile: `.controls { flex-wrap: wrap; position: sticky; bottom: 0; z-index: 5; background: var(--surface-sunken) }`, primary `flex: 1 1 100%; order: 1; padding: 12px` (full width as the bottom row = a large tap zone), the three utility ones - side by side above, `white-space: nowrap`.
-9. **Viewswitch + assist: demote to a dev panel.** Wrap both blocks in a single `.devbar` row with a "⚙ playtest" prefix, `opacity: .6`, `font-size: var(--fs-2xs)`, dashed border `--border`; move it BELOW the grid (or collapse it behind a ⚙ icon that expands on click). Wrap the checkboxes in a label with padding ≥6px (tap on the text). The clickable state keeps ≥3:1 - we mute via the group's opacity, not text color. Currently they sit above the grid, louder than the category headings, and on mobile grow into 62px tiles.
-10. **Clue panel.** Clue text → `--fs-sm` 13px, line-height 1.45, `--text-2`; row padding 10px 12px (row ≥40px), on touch min-height 44px. Statuses: st-ok - `opacity: .68` (4.9:1 instead of 3.67) + `text-decoration: line-through` in `--muted` color (a non-color duplicate); st-bad - dark text `--on-accent` on a red badge (6.21:1 instead of white 3.05) + a red left strip on the row (mirror of hint-target). Bring back the legend as one `--muted` 12px line: "🟢 satisfied · 🔴 violated · tap - highlight on the board". Tip `#566083` → `--muted`. Mobile: `max-height: min(34vh, 260px)` instead of 150px + bottom fade-hint + thin dark scrollbar; clue tap-highlight - toggle (a second tap removes it) with a visible `.pinned` border; disable the mouseenter logic on a coarse pointer.
-11. **The grid dominates.** Cells `.bcell/.cell`: border `--border-strong #39466e` (currently 1.19:1 - the board is indistinguishable from the panel), hover border `--border-hover`; center the grid vertically (`align-items: center`), grid-help - right under the table, not at the bottom edge (removes the ~70-160px dead zone). Confirmed cell: keep the collapse into a large green chip with ✓ (Cross Logic canon), the ✓ and border hold ≥3:1 on the cell background. Do NOT shrink chip-m to 26px on mobile - keep 30×30, gap 6px, hit-area up to ~44 via a pseudo-element; horizontal scroll with sticky names and edge-fade is an honest pattern.
-12. **Casebar.** Diff badge "medium-light": free up the yellow for hint - `color: var(--muted); background: transparent; border-color: var(--border)`. Mobile: one line, `padding: 8px 12px`, `.case-title { font-size: var(--fs-sm) }`, hide diff. CASE #N - large, the ritual identity of the issue.
-13. **HUD priorities.** Progress - visually senior: value in `--orange` color or a mini chip fill 0→12; errors in red only when >0; timer - last, muted. Do not bring back labels - icons+numbers are enough (genre canon: pictograms, not words).
-14. **Hint-box.** Appearance: fade+slide 200ms + a single flash of the `--yellow` border; after clicking "Hint" - `scrollIntoView` to the block (the "button at the bottom → block at the top" route is unsupported by anything). The yellow pair #241d10+#ffd166 is hint-exclusive.
-15. **Footer note.** `#566083` (2.8:1) → `--muted`, shorten to "🔒 Voting opens after you solve", one `--fs-xs` line. **[removed]** - the footer note has been removed from the game screen (see Iteration 3); do not bring back the topic-vote teaser.
-16. **Result screen - hierarchy flip.** Hero block: "Case closed!" `--fs-xl` → large time + percentile ("faster than 46% of detectives") `--fs-lg` with a green/orange accent (the main share stat). "Close" → ghost; in the result card the only filled/primary button is "↺ Play this case again". Collapse the solution table into `<details>` (the player just saw the solved board) - **implemented** (`.final-wrap` = `<details>` "Full solution"). Countdown "next case in HH:MM" as a reason to return - **implemented** (`r-next`, "Opens in Xh Ym"; when data is missing - a placeholder based on local midnight).
-> **[removed]** The community-loop parts of this item are cut: the share CTA "Post to comments" (`.deduction-actions`), the topic poll before the vote (`.pct`, voted/mine border), and the nickname submit input (UGC). The only live post-solve vote is the honest difficulty vote Harder/Same/Softer (`r-tomorrow`/`renderVote`); it is neither a topic poll nor a share.
-17. **Intermediate width 761-899px.** `.clue-panel { width: clamp(240px, 32%, 292px) }` - currently the fixed 292px leaves the grid 435-570px when it needs ~540, and horizontal scroll appears even before the mobile breakpoint.
-18. **Tabs ("Tabs" mode).** `.tab .cnt` - remove opacity .75 on the inactive one (pure `--muted` = 5.05:1); tab height on mobile ≥40px (padding 10px 14px). Struck-out cell ✕ → `--red-soft` (currently the saturated red screams like an error and by mid-game the board is "all red"; bright `--red` - only st-bad/toast).
+`--sheet-raised`, `3px solid --ink-3` left rule, caps header `HINT 1 OF 1 · REVEALED`, body in
+`--ink`. No hue: the legacy yellow pair is gone. It docks at the bottom of the clue column, so a
+revealed hint never displaces the board.
 
-### P2 - polish
+### 4.8 Result sheet
 
-19. **Toast.** err/ok/info backgrounds via tokens `--err-bg/--ok-bg/--info-bg`; mobile `bottom: 12px; max-width: calc(100vw - 24px)` (do not cover the result buttons).
-20. **Overlay.** `overscroll-behavior: contain` + `body { overflow: hidden }` on show (remove in btn-close) - the background does not scroll under the modal.
-21. **Focus/keyboard.** Global `:focus-visible` in blue (does not conflict with orange/red semantics); interactive cells eventually → `<button>` (out of current scope, record in docs/09).
-22. **Unknown mark "·"** → `#454f75` (an intentionally empty state, but a bit more visible than 1.45:1).
-23. **Summary table** → `.final td { white-space: nowrap; font-size: var(--fs-xs) }` in the MQ (the emoji does not wrap away from the word).
-24. **Micro-feedback instead of text** (as feasible, CSS-only): shake the cell on a contradiction, a short scale on confirmation - the legend text gradually moves into the "?" modal.
-25. **Verification:** after edits, run a deuteranopia emulation (DevTools → Rendering) on three states: empty grid, baseline-mid, result. Apply fixes to index.html AND _shot.html in sync (the MQ is offset: index 289-300 = _shot 310-321; index has no .assist/.hovered/.forced - do not lose them in the merge).
+Not a modal from another design system — a raised sheet of the same file, over a 76%-opaque
+`--paper` scrim through which the solved board stays visible. `CLOSED` stamp top-right.
 
----
+> ⚠️ **Superseded in part by [11-stats-ia.md](11-stats-ia.md) (dec. 102+).** The result sheet is now
+> ordered by *world* — this case ① → you ③ → the day ② — and its cells changed with it: the `hints`
+> fact became `· 1 cell revealed` in the subline (the word was wider than the counter: rungs 1-2 are
+> hints too, and free), the facts strip carries `CURRENT STREAK` and `LONGEST STREAK` under separate
+> words, a kicker reads `CASE #47 · YOUR 14TH`, and a `Your file` button opens the surface that owns
+> world ③. Read the order below as the shape before that pass; `11-stats-ia.md` §4.3 is authoritative.
 
-## 4. What NOT to do (anti-goals)
+Order, as it shipped before the stats-IA pass: hero (`Case closed` caps → 34px mono time → serif
+percentile line) → three facts in a ruled strip (hints / streak / rank) → **histogram**
+(`#r-histblock`) → **the standings block**
+(`#r-lbblock`: four tabs Today / Week / Streak / All-time over `ledger.ts`, your pinned row, and a
+`See all` button into the full-screen standings) → **`Tomorrow's case`** (`#r-tomorrow`: the countdown
+rides the section heading, then the difficulty vote and vote bar) → `Full solution`, a hidden section
+the footer toggles open (`#r-solution`) → footer: `Full solution` (ghost) + `Play this case again`
+(secondary). No filled button: after a solve the primary act is to leave, and the vote is the thing
+worth touching.
 
-- **The "Single board/Tabs" viewswitch and "Tabs" mode are REMOVED** (user decision 2026-07-07): the board beat tabs in playtests, one view remains. The audit items above about demoting the viewswitch/devbar and the assistant toggles are historical; there is nothing left to demote into a dev panel. (The earlier directive "do not remove as a playtest tool" is rescinded.)
-- **Do not change the game's JS logic** (generation, checking, scoring). The permitted JS minimum: input handlers for touch (long-press/tap cycle, toggle clue highlight), grid-help text substitution, scrollIntoView, overlay scroll locking.
-- **Do not switch to Reddit orange #FF4500/#D93900** - differentiating from the system upvote UI is an advantage.
-- **Do not fill large areas with orange** - the accent is pinpoint (CTA, progress, brand echo).
-- **Do not use `maximum-scale`/`user-scalable=no`** to fight iOS zoom - only 16px on the input.
-- **Do not shrink tap targets for the sake of "fitting without scroll"** - a 30px chip + hit-area + honest horizontal scroll is better than 26px chips.
-- **Do not express state by color alone** - each one (✕/✓/flair letter/line-through/"!") is duplicated by a sign or shape.
-- **Do not introduce a fifth gray-text step or fractional font-sizes** - 3 text tokens, 7 scale steps, integer px.
-- **Do not make routine cross-out red** at the same intensity as an error - saturated `--red` is exclusive to violations.
-- **Do not remove the emoji from clue text** - there they are duplicated by a word and work.
-- **Rollout order:** first declare tokens in `:root`, then a mechanical value replacement (a logged decision for docs/09-design-decisions.md), then component changes P0→P1→P2; after each block - a screenshot comparison against baseline.
+Two things this section used to describe are gone. The **sealed envelope** was deleted (dec. 79) — it
+was a fourth framed thing on a sheet that already had too many, and its whole payload, the next case
+number and its countdown, is one phrase that now rides the `Tomorrow's case` heading; the `SEALED`
+stamp went with it. And "today's fastest" is no longer a three-name list but the full four-board
+standings block, which is the same component the standings screen uses.
 
-## Palette (final tokens)
+**Histogram** (decision №21 stays: by solve time, one series). Bars `--groove` filled with a
+`--rule-strong` boundary; your bin filled `--ink`; a `YOU` caps label under the axis. Achromatic —
+which is exactly what the dataviz method asks for when one series has one highlighted member.
 
-| Token | Hex | Role | Contrast |
-|---|---|---|---|
-| `--surface-0` | `#0b101e` | Page background (formerly --bg); backgroundColorDark for Devvit | base of the elevation ladder |
-| `--surface-1` | `#131a2e` | Panels: board frame, clue-panel, casebar | muted 5.65:1, text 14.9:1 |
-| `--surface-2` | `#1a2340` | Cells, cards, inputs, tabs | muted 5.05:1, text 12.98:1 |
-| `--surface-3` | `#1f2846` | Hover, result modal, elevated elements | muted 4.73:1 - the limit, do not go lighter |
-| `--surface-sunken` | `#10162a` | Clue container, controls bar | muted 5.9:1 |
-| `--text` | `#e8ebf5` | Primary text | 15.93:1 on surface-0 |
-| `--text-2` | `#c6cbdc` | Clue text, tables, poll percentages | 9.55:1 on surface-2 |
-| `--muted` | `#8b93ab` | Captions, counters, grid-help, footer (replacing the illegal #566083) | 4.73-6.20:1 on L0-L3, AA everywhere |
-| `--on-accent` | `#0b101e` | Text on any colored fill (orange/green/red/yellow) | 8.20:1 on orange, 6.21:1 on red, 13.16:1 on yellow |
-| `--border` | `#26304f` | Decorative dividers | 1.33:1 - decor only, not an indicator |
-| `--border-strong` | `#39466e` | Grid cell borders (board visibility) | ~2:1, duplicated by the surface-2 fill |
-| `--border-active` | `#6b76a0` | Border indicator of state/interactivity | 3.89:1 on surface-1 - passes SC 1.4.11 |
-| `--border-hover` | `#5f70ad` | Hover borders of cells and chips | ~3:1 on surface-1 |
-| `--orange` | `#ff8c42` | Only primary CTA, progress, brand echo (CASE #N, logo) | 7.48:1 on surface-1 as text; not Reddit #FF4500 |
-| `--orange-dim` | `#b35a20` | Non-text only: muted CTA fill before 12/12, borders | 3.62:1 - forbidden as text |
-| `--green` | `#35c46f` | Confirmed: ✓, yes cells, st-ok | 7.64:1 on surface-1 |
-| `--red` | `#ff5a5f` | Only errors: violated clue, err-toast, warn-hover | 5.66:1 on surface-1; text on it - dark only |
-| `--red-soft` | `#c96b6e` | ~~Routine ✕ cross-out in "Tabs" mode~~ **removed along with "Tabs" mode** | - |
-| `--strike` | `#6b7590` | Chip strike-through line in "Single board" (outside opacity) | 3.05:1 against chip background #202a4c |
-| `--blue` | `#4f9cff` | Focus-visible outline, info-toast | 6.20:1 on surface-1 |
-| `--purple` | `#a78bfa` | Tomorrow block | 6.35:1 on surface-1 |
-| `--yellow` | `#ffd166` | Exclusively hint semantics (hint-box, hint-target) | 11.99:1 on surface-1; take it away from the diff badge and viewswitch |
-| `--flair-r` | `#D55E00` | Flair Red (Okabe-Ito vermillion), chip with letter R | 4.47:1 on surface-1; CVD-safe pair with --flair-g |
-| `--flair-b` | `#56B4E9` | Flair Blue (sky blue), chip with letter B | 7.49:1 on surface-1 |
-| `--flair-g` | `#009E73` | Flair Green (bluish green), chip with letter G | 5.05:1 on surface-1 |
-| `--flair-p` | `#CC79A7` | Flair Purple (reddish purple), chip with letter P | 5.65:1 on surface-1; distinguishable from --flair-b under protan/deutan |
-| `--hint-bg` | `#241d10` | Background of hint-box/hint-target (warm pair with --yellow) | yellow on it 11.6:1 |
-| `--ok-bg` | `#123524` | Background of ok-toast and yes states | green text ≥5:1 |
-| `--err-bg` | `#241012` | Background of err-toast | red text ~5.7:1 |
-| `--info-bg` | `#10223a` | Background of info-toast | blue text ≥5:1 |
+### 4.9 Leaderboard
 
----
+Tabs = mono caps with a 2px `--ink` underline on the selected one. Table `.rows`: mono caps header
+over `--rule-strong`, rows divided by `--rule`, figures right-aligned mono tabular. Your row:
+`--groove` background + `inset 3px 0 --ink` + bold + a `You` tag. Never a coloured row.
 
-## Deviations during rollout (after verification, 4 agents in round 2)
+### 4.10 Splash (the feed's first screen)
 
-- **The CTA is always filled** `--orange` (not "outline until 12/12 → fill"): the "--orange-dim fill + dark text" variant does not pass 4.5:1 for 14px text, and the outline variant read as secondary. The 12/12 state is conveyed only by the `readypulse` pulsation; behind the modal the animation is disabled (`body.modal-open`).
-- **The flair chip strike-through line** - scoped `#99a1b8` (instead of the global `--strike #6b7590`): on 30% flair mixes `--strike` gave 2.07-2.65:1; `#99a1b8` gives ≥3.69:1 on all four.
-- **Added the token `--fs-2xl: 28px`** for the result hero stat (the 28px hardcode legalized into the scale).
-- **The glyph ⏱ (U+23F1)** without VS16 renders as tofu in Firefox/webview - in the HUD it is replaced with `⏱️` (with VS16), and the icon is removed from the hero stat.
-- **Struck-out glyph**: opacity .6 (not .55 from the spec) - so that struck-out time digits hold ~4.45:1.
-- **The "clue → board" tap-highlight is deliberately NOT implemented**, though the spec required it: the board-highlight mechanic was removed by playtest (decision log, dec. 10) as confusing. Recorded as an open question in [09-design-decisions.md](09-design-decisions.md).
-- **The unknown mark `#454f75`** (1.93:1) is left deliberately quiet - a designed "no data" state.
+> ⚠️ **Superseded in part by [11-stats-ia.md](11-stats-ia.md) §4.1 (dec. 102+).** The docket is now
+> two or three cells grouped **by world**, with the boundary between worlds drawn a weight heavier —
+> never four or five, and never a cell whose subject changes at a threshold. The day-scoped cells
+> (`SOLVED TODAY`, `NEXT CASE`) and the all-time `DETECTIVES` left it: a card attached to one case
+> was carrying three worlds in identical type, which is exactly what a live player read as wrong.
+> The brief paragraph now changes with state — the rules before a solve, the next case and the
+> standing vote after one. Two buttons since dec. 98. `11-stats-ia.md` is authoritative.
 
----
+Wordmark (mono, `.3em` tracking) → `CASE 047` in `--stamp` → serif title → **one** paragraph of rules,
+the same sentence the board carries under the grid → the **docket** (`#docket`) → **one** button.
+Tier stamp top-right, outside `.top` so it only has to clear the title. No scroll.
 
-## Iteration 2 (2026-07-07, per user decisions)
+The docket replaced the ruled social line. It is a grid of the file's own figures from
+`/api/preview`, and its first cell is the twelve-square board itself, so the feed shows what the game
+*is* before anyone has pressed anything. A figure with no number is simply not printed (dec. 37) —
+the splash never invents social proof.
 
-**Inline mode (game in the feed, Devvit tall 512px).** `@media (max-height: 720px)`: header+casebar+controls are fixed, `.main` scrolls inside (thin dark scrollbar); clues fill their panel in the two-column layout, in stacked - a 26vh window; devbar and footer are hidden; the 720px threshold closes the 620-720 zone where the CTA went below the fold.
+Two buttons: `#play` (primary, with an optional sub-label) and a `Standings` secondary
+(dec. 98). An earlier revision of this section forbade the second one, on the grounds that the
+standings lived in a post of their own and the splash had nowhere to send anyone. Both halves of
+that reasoning have since gone: dec. 85 deleted the standalone standings post, dec. 75 made the
+standings a screen inside the game - and a live player put it plainly, that the board was the only
+way in and it was one press too many. The splash hands over through `handoff.ts` rather than a URL,
+because `requestExpandedMode()` takes an entry name and nothing else.
 
-**Light result card** (reference - r/ColorPuzzleGame): local token overrides in the `.result` scope (`#fff` background, text `#1c2437/#3c4660/#5f6b84`, green `#147a43` ≥4.5:1, blue focus `#2563eb`, light toasts on `modal-open`, hover darkening instead of lightening). The card fits a 900px viewport without scrolling: stats in one line + PB/world (mock), a histogram, a collapsed summary, closing via ✕/Esc/click on the background, re-entering a solved case reopens the card. **[removed]** from the list above, the deduction card, 2×2 poll, submit input, and a set of retention CTAs (community-loop/share) are cut; of the live post-solve, only the difficulty vote remains.
+### 4.11 Loading / error
 
-**Solve-time histogram** (designed per the dataviz method): one series, bars ≤22px with a 4px gap and a rounded top; neutral `#6b7590`, player bar `#d9631e` (validator: contrast ≥3:1 on white, CVD ΔE 67.6); labels selectively - "you" and the peak (when they coincide - both); label text in ink tokens, not the series color; tooltips on the bins. Data - mock `TIME_BINS`, in prod - from the server.
-
-**Touch addition:** long-press on a board chip shows the candidate's name (replacing the desktop tooltip). Confetti on solve - one-time, disabled by `prefers-reduced-motion`.
+Loading: caps `OPENING CASE FILE`, four `--groove` skeleton rules, a mono status line.
+Error: `FILE UNAVAILABLE` red stamp, one sentence that says progress is safe, a single `Try again`
+(primary), then the technical line in mono caps. No `Standings` button — a screen that failed to
+reach the server is the wrong place to offer a second server round-trip.
 
 ---
 
-## Iteration 3 (2026-07-07, "game only")
+## 5. Global rules
 
-**Screen = post.** `.app` 700px, `.board` - height `min(512px, 100vh−16)` on desktop: by default the prototype looks like a Devvit post in the feed (reference - r/ColorPuzzleGame). The brand line, footer note, and status legend are removed from the game screen; the HUD is compressed to "✔ progress · ✖ errors (appears after the first) · ⏱ time" in the case line; the logo is 🧵 before CASE #N. Control instructions + legend - a toast behind the "?" button. Controls: ↺ ↩ ? - ghost icons, 💡 Hint - secondary (on mobile - an icon), CTA - the only filled one.
+```css
+:root { color-scheme: light dark; }
+:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+button { touch-action: manipulation; }
+body { overflow-x: hidden; }
+.num, mono contexts { font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after {
+  animation: none !important; transition: none !important; } }
+```
 
-**Desktop 700×512 - no scrolling:** clue panel `clamp(210px,31%,240px)`, clue rows 12px/1.35 (all 10 visible), chips 24px (bcell 44px) - the grid fits into the remaining ~458px without horizontal scroll.
+The focus ring is **ink**, not blue — 13.1–16.1:1 on the sheet in both themes, and since it sits at
+`outline-offset: 2px` it lands on paper even around a saturated coat chip. Dropping blue from the
+system costs nothing and removes a hue that meant "focus" in one place and "info" in another.
 
-**Phone - no scrolling:** a new compact board render `renderBoardGridNarrow()` (switched via `matchMedia(max-width:760px)`, display-only): the suspect name above a row of three cells, total width ≤390px; columns are labeled once at the top. All clues + grid + controls fit entirely in 390×844. In the 390×512 feed preview the middle scrolls inside the post (26vh of clues) - the full view opens by expanding the post.
+**Theme.** Light is `:root`; dark is `@media (prefers-color-scheme: dark)`, guarded
+`:root:not([data-theme="light"])`. The prototype adds `[data-theme]` purely so screenshots can be
+forced; the app ships with the media query only — Devvit gives no theme toggle, and the webview
+inherits the client's scheme. A white rectangle in a dark Reddit feed is as foreign as a black one
+in a light feed, so both themes are mandatory, not optional.
 
-**Trade-off:** 24px chips are below the recommended 44px tap targets - compensated by an expanded invisible tap zone (::before) and the long-press name; revisit after a phone playtest.
+**Breakpoints.** `720px` (single ↔ two column, table ↔ narrow board, chip 28 ↔ 44),
+`880px` height on phones (tighten clue rows), `700px` height (short-viewport tier: 14px base,
+40px targets, compressed result sheet).
 
 ---
 
-## Iteration 4 (2026-07-07, auto-check)
+## 6. The token file
 
-**No "Check" and no errors.** `maybeSolve()` after every move: 12/12 filled in and matches the solution → `btn-hint` hides, "🏆 Results" appears, after 900ms - the result card (appearance slowed: overlay fade .5s + rise .55s). An incorrect full layout is not penalized in any way - the violated clues turn red on their own. The error counter is removed from the HUD, the mention of errors from the result stats and deduction card, and the error penalty from the percentile formula. The board shake animation is removed along with checking.
+This section has stopped being a handoff: the rewrite it proposed **has shipped**. The contract
+[tokens.css](../src/client/tokens.css) states — *"swapping the visual language is a rewrite of this
+file, not of the components"* — holds in the code, and token names are kept where the previous system
+had them (`--font-sans`, `--font-mono`, `--tap`, `--sp-*`, `--fs-*`), so the swap was mechanical.
 
-**Solved suspect row:** `.bcell.solved` - a permanent green border on all three cells of the row; `.just-solved` - a one-time `rowglow` flash (0.9s) at the moment of solving (tracked via the `rowsDone` set, reset on undo/restart); the ✓ by the name - a pop animation.
+Below is a **values-only mirror** of what ships. The file itself is the source of truth and carries
+the rationale for each value in comments; when they disagree, the file is right and this section is
+the bug. Every colour here is the post-repair value (§1's revision note) and is what §2 was measured
+against.
+
+```css
+/* src/client/tokens.css — D3 "Manila". Light is the base; dark via prefers-color-scheme. */
+:root {
+  color-scheme: light dark;
+
+  /* surfaces — higher is lighter, in both themes */
+  --paper: #BEAD8C; --sheet: #F8F4EB; --sheet-raised: #FFFDF8; --groove: #D9CFBA;
+
+  /* ink */
+  --ink: #1B1815; --ink-2: #4A433A; --ink-3: #5C5446; --ink-inv: #FFFDF8; --strike: #4A433A;
+
+  /* lines */
+  --rule: #BEB299; --rule-strong: #655B47;
+
+  /* elevation — a printed drop, both offsets mixed out of --ink */
+  --shadow-1:
+    0 1px 0 color-mix(in srgb, var(--ink) 16%, transparent),
+    0 3px 8px color-mix(in srgb, var(--ink) 10%, transparent);
+
+  /* the one accent */
+  --stamp: #9E2B1C; --stamp-ink: #FFFDF8; --stamp-wash: #E4C8BD;
+  --scrim: color-mix(in srgb, var(--paper) 76%, transparent);
+
+  /* evidence — Okabe-Ito coats */
+  --coat-r: #D55E00; --coat-r-ink: #100D0A; --coat-r-out: #F0D3B7;
+  --coat-b: #0072B2; --coat-b-ink: #FFFDF8; --coat-b-out: #C1D7DE;
+  --coat-g: #009E73; --coat-g-ink: #100D0A; --coat-g-out: #C1E1D1;
+  --coat-p: #CC79A7; --coat-p-ink: #100D0A; --coat-p-out: #EED9DC;
+
+  /* type */
+  --font-sans:  -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono:  ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --font-serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia,
+                "Times New Roman", serif;
+  --fs-2xs: 11px; --fs-xs: 12px; --fs-sm: 13px; --fs-base: 15px;
+  --fs-md: 17px;  --fs-lg: 21px; --fs-xl: 26px; --fs-2xl: 34px;
+  --ls-caps: .12em;
+
+  /* spacing, radii, metrics */
+  --sp-0: 2px; --sp-1: 4px; --sp-2: 8px; --sp-3: 12px;
+  --sp-4: 16px; --sp-5: 24px; --sp-6: 32px; --sp-7: 48px;
+  --r-0: 0; --r-1: 2px;
+  --chip: 34px; --tap: 44px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0A0907; --sheet: #2A2419; --sheet-raised: #3B3422; --groove: #16130E;
+    --ink: #F2ECE0; --ink-2: #D2C8B5; --ink-3: #A89E87; --ink-inv: #16130E; --strike: #D2C8B5;
+    --rule: #554D3D; --rule-strong: #968B75;
+    --shadow-1:
+      0 1px 0 color-mix(in srgb, var(--paper) 70%, transparent),
+      0 3px 10px color-mix(in srgb, var(--paper) 55%, transparent);
+    --stamp: #E8886F; --stamp-ink: #16130E; --stamp-wash: #483427;
+    --coat-b: #56B4E9; --coat-b-ink: #100D0A;
+    --coat-r-out: #5A3412; --coat-b-out: #364C53; --coat-g-out: #1E4632; --coat-p-out: #573C41;
+  }
+}
+@media (min-width: 720px) { :root { --chip: 44px; } }
+@media (max-width: 719px) { :root { --chip: 28px; } }
+@media (max-height: 700px) { :root { --tap: 40px; --fs-base: 14px; } }
+@media (max-height: 700px) and (min-width: 720px) { :root { --chip: 34px; } }
+@media (max-height: 700px) and (max-width: 719px) { :root { --chip: 26px; } }
+```
+
+Dark inverts the shadow's ingredient, not its direction: it mixes out of `--paper` (near-black)
+rather than `--ink` (near-white), so a raised sheet still darkens what it lies on.
+
+### 6.1 Mapping from the legacy tokens
+
+Left column = the legacy navy tokens, preserved in
+[10-design-spec-legacy.md](10-design-spec-legacy.md). None of them survive in
+[tokens.css](../src/client/tokens.css) — this table is how to read old code, not current code.
+
+| Legacy | D3 | Note |
+|---|---|---|
+| `--surface-0` `#0b101e` | `--paper` | |
+| `--surface-1` `#131a2e` | `--sheet` | |
+| `--surface-2` `#1a2340` | `--sheet-raised` **or** `--groove` | cards/hover → raised; bars/`th`/empty chip → groove |
+| `--surface-3` `#1f2846` | — | **deleted**, four steps are enough |
+| `--surface-sunken` `#10162a` | `--groove` | |
+| `--surface-raised` `#202a4c` | `--sheet` | a chip at rest sits on the sheet, not above it |
+| `--surface-crossed` `#141a2c` | `--groove` | coats use `--coat-*-out` instead |
+| `--casebar-top` `#182140` | — | **deleted** — the header is flat, separated by `--rule-strong` |
+| `--scrim` | `color-mix(in srgb, var(--paper) 76%, transparent)` | the solved board must stay visible behind the result |
+| `--shadow-1/2/3` | `--shadow-1` | three photographic shadows collapse to **one printed drop** (§1.1a). Decision 57 deleted all three; the ladder repair reinstated exactly one, because `--sheet-raised` is capped by white and cannot buy an edge with lightness |
+| `--text` | `--ink` · `--text-2` → `--ink-2` · `--muted` → `--ink-3` | |
+| `--on-accent` `#0b101e` | `--ink-inv` | now means "on an **ink** fill" — there are no coloured fills left to sit on |
+| `--border` | `--rule` | |
+| `--border-strong` `#39466e` | `--rule-strong` | now genuinely ≥3:1 (the legacy one was ~2:1 on its own surface) |
+| `--border-active`, `--border-hover` | `--rule-strong` | one structural line token, not three |
+| `--orange`, `--orange-strong` | `--ink` (CTA, progress) / `--stamp` (case stamp) | the CTA is a filled ink button |
+| `--green` | — | "confirmed" is an ink ring; "satisfied" is a strike-through |
+| `--red` | `--stamp` | |
+| `--blue` | `--ink` | the focus ring |
+| `--purple` | — | the tomorrow block is ink and rules |
+| `--yellow`, `--hint-bg/border/fill/fill-hover/line` | `--sheet-raised` + a `--ink-3` left rule | the hint slip is achromatic; five tokens collapse to zero |
+| `--strike` `#6b7590` (scoped `#99a1b8` on flair chips) | `--strike` | one value; the scoped override is no longer needed |
+| `--ok-bg/border`, `--info-bg/border` | — | **deleted**, no success/info colour exists |
+| `--err-bg/border` | `--stamp-wash` / `--stamp` | |
+| `--flair-r/b/g/p` | `--coat-r/b/g/p` + `--coat-*-ink` | same Okabe-Ito hues; **blue is theme-dependent** (`#0072B2` light / `#56B4E9` dark) and letter ink is per-coat |
+| `--flair-*-off` (15% over the board) | `--coat-*-out` (22% light / 28% dark, over the sheet) | recomputed for a light ground |
+| `--bar`, `--bar-2`, `--bar-you`, `--bar-you-2` | `--groove` + `--rule-strong` / `--ink` | the histogram is achromatic |
+| `--vote-harder/same/softer` | `--ink` / hatched `--rule-strong` / `--groove` | solid · hatched · empty + printed percentages |
+| `--font-sans`, `--font-mono` | unchanged | `--font-serif` added |
+| `--fs-*` 11/12/13/14/17/20/24/28 | 11/12/13/**15**/17/**21**/**26**/**34** | body up one step (expanded mode has the room); hero up |
+| `--r-s` 8 / `--r-m` 12 / `--r-l` 16 / `--r-pill` | `--r-1` 2 / `--r-0` 0 | |
+| `--sp-1…5` | unchanged; `--sp-0: 2px` and `--sp-6/7` added | |
+| `--chip-min` `clamp(34,12vw,44)`, `--chip-h` `clamp(30,4.2vh,44)` | `--chip` | one square token, stepped by media query — a chip is a square, and two clamped axes let it go non-square |
+| `--tap` `44px` | unchanged (40px on short viewports) | |
+
+**Delete outright, do not port:** the `.result` scope override (decision №20 — this is what made the
+result card a second application); the `body.modal-open` light toast overrides; the casebar gradient;
+every `box-shadow`; `--surface-3`; `--border-active`; `--border-hover`; the whole hint colour group;
+the ok/info status surfaces.
+
+### 6.2 Decisions this spec supersedes
+
+Record each reversal as a **new row** in [09-design-decisions.md](09-design-decisions.md); do not
+edit the old rows.
+
+| # | What changes |
+|---|---|
+| 17 | "orange = CTA only, yellow = hint only" → there is no orange and no yellow; the CTA is a filled ink button, the hint slip is achromatic |
+| 18 | "result: primary = share" → the result has no filled button at all |
+| 20 | **light result card over a dark game** → the result is a raised sheet in the same theme; the local override is deleted |
+| 21 | histogram stays by solve time; the series becomes `--groove` / `--ink` instead of `#6b7590` / `#d9631e` |
+| 23 | "minimum information on the game screen" holds, but the board carries a one-line instruction (`TAP A CANDIDATE TO RULE IT OUT…`) — Reddit's featuring gate requires self-explanatory design |
+| 16 | **unchanged and re-verified.** Okabe-Ito + R/B/G/P letters carry over; blue is now theme-dependent and the letter ink is per-coat |
 
 ---
 
-## Iteration 5 (2026-07-08, hackathon layer)
+## 7. How the numbers were produced
 
-Full English + de-Reddit reskin (Coat/Item/Omar; "rank", not "flair"). New blocks: an epilogue line under the casebar; an onboarding coach (spotlight `box-shadow 0 0 0 100vmax` + tooltip, 3 steps); the result card: hero (percentile at N≥50 / ordinal at N<50, a single number with a histogram from the same buckets), a difficulty vote + a `CASE #N+1 [SEALED]` envelope with a ticker and countdown, a single ghost button "Play this case again". **[removed]** "Your trail" (the copyable path string / share-to-thread) is cut; the ①-④ suspect numbering remains only in the grid. There are no stub buttons or confirm(); server strings are assembled via textContent (`setRich`) - an XSS pattern for the port. The "day 2 / at scale" data playtest toggle - in the devbar below the post, hidden at inline height. Launch texts (pinned comment, templates, rank ladder) - docs/12-launch-content.md.
+[10-design-spec-wcag.py](10-design-spec-wcag.py) — WCAG relative luminance and contrast ratio,
+sRGB alpha compositing (matching `color-mix(in srgb, …)`), Viénot/Brettel LMS dichromacy
+simulation for protan/deutan/tritan, and CIEDE2000. It is the maths only; it has no idea what the
+app ships.
+
+> **Where these live.** `docs/10-design-spec-wcag.py` (the maths), `docs/10-design-spec-contrasts.txt`
+> (the run), `10-design-spec-legacy.md` and `10-design-spec-proto.html` are all **tracked** and sit
+> next to this file, so every number in §2 and §3 is checkable from a fresh clone. That closes a loose
+> end this section used to carry: they were untracked, and the promise was true on one disk only.
+>
+> The *driver* and the screenshot harness are the exception. They live under `plans/`, which
+> `.gitignore` excludes on purpose — they are internal tooling, they carry local paths and browser
+> profiles, and **every `plans/…` path in this document resolves in a working checkout only.**
+
+The **driver** is `plans/assets/proto/04-polish/verify-contrast.py`. It parses
+[tokens.css](../src/client/tokens.css) with a regex, resolves the dark block over the light one, and
+runs every pair the application pass actually puts on screen — including the surface-to-surface pairs
+the first audit had no concept of. Every ratio in §2 and every ΔE in §3 is transcribed from its
+output; the raw run is [10-design-spec-contrasts.txt](10-design-spec-contrasts.txt).
+
+```sh
+python3 plans/assets/proto/04-polish/verify-contrast.py            # the whole audit, both themes
+python3 docs/10-design-spec-wcag.py '#5C5446' '#D9CFBA'            # → 4.83:1, one pair by hand
+python3 docs/10-design-spec-wcag.py cvd '#D55E00' '#0072B2' '#009E73' '#CC79A7'
+```
+
+The CVD sheets in `plans/assets/shots/03b-design-system/cvd/` are the same simulation applied
+per-pixel to real rendered frames, not to swatches — which is how the crossed-wash collapse was
+caught rather than assumed.
+
+Screenshots: `firefox --headless --window-size=W,H --screenshot`, driven by
+`plans/assets/proto/04-polish/shoot.sh`. They are shot from the **real built client**
+(`dist/client`) served by `plans/assets/proto/04-polish/fixture-server.ts`, not from the prototype —
+a spec that only ever verifies its own mock verifies nothing. Firefox has no CLI switch for the
+colour scheme, so each theme gets a profile with `ui.systemUsesDarkTheme` pinned. Matrix: 18 states ×
+{375×667, 393×852, 360×800, 1440×900} × {light, dark}, plus the 320px-tall feed slot at three widths,
+into `plans/assets/shots/04-polish/`. The contact sheets (`_sheet-<size>-<theme>.png`) are a second
+pass, written by `sheets.py`, not by `shoot.sh`.
+
+```sh
+npm run build:client
+npx tsx plans/assets/proto/04-polish/fixture-server.ts 8782 &
+plans/assets/proto/04-polish/shoot.sh
+python3 plans/assets/proto/04-polish/sheets.py   # the _sheet-<size>-<theme>.png contact sheets
+```
+
+`shoot.sh` writes the frames; `sheets.py` is what assembles the contact sheets, and it is a separate
+step.
+
+The harness does more than shoot: `fixture-server.ts` runs the §1.1 check (`onPaper` — nothing but
+`--ink` may be set on `--paper`) on every frame it renders and POSTs any offending element back,
+which the server prints as a `REPORT` line. Note what that is and is not: it **measures and reports**,
+it does not fail the run or exit non-zero. The rule is mechanically observed, not mechanically
+enforced — somebody has to read the log.
+
+---
+
+## 8. Open questions and known limits
+
+1. **44px tap targets are impossible on a phone with this board.** Twelve chips across a 360–393px
+   viewport gives 26–28px. The expanded hit area (`::before`) brings the *touchable* region to
+   36×44 at 28px chips and 34×42 at 26px (`.chip-m::before { inset: -8px -4px }` under 720px), but
+   the *visual* target stays 26–28px. Plan 03's acceptance criterion "tap targets ≥44px
+   everywhere" cannot be met by expanded mode alone — expanded mode adds height, and width is the
+   binding constraint. Either the criterion relaxes for the evidence grid, or the narrow board
+   stacks the three categories vertically (which costs ~400px of height and does not fit 667).
+   Flagging, not deciding — this is 03a's call.
+2. **`--ink-3` on `--sheet-raised` in dark is 4.65:1.** It passes, with little margin — and after the
+   surface repair it is the *binding* constraint on the dark ladder. If `--sheet-raised` is ever
+   lightened past `#3B3422`, `--ink-3` must be relightened with it, and `--stamp` (4.81:1 on the same
+   surface) checked in the same breath.
+3. **The serif on Android.** Falls through to Noto Serif; cap height and width differ slightly from
+   Iowan/Georgia. Confined to two single-line strings on purpose. Check the case title's ellipsis
+   behaviour on a real Android device before shipping.
+4. **The crossed washes under deutan/tritan collapse (§3).** Accepted and documented. If a future
+   change removes the letter from the chip, the entire CVD argument collapses with it — the letter
+   is load-bearing, not decorative.
+5. **The result sheet scrolls at 375×667 if the vote section grows.** It fits today with ~20px to
+   spare. Any new block on the result needs a re-shot at 375×667 before it lands.

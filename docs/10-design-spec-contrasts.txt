@@ -1,0 +1,172 @@
+Deducto D3 "Manila" - contrast + CVD verification of the SHIPPED tokens
+source: src/client/tokens.css  ·  maths: docs/10-design-spec-wcag.py
+thresholds: text AA 4.5:1, non-text 3:1 (SC 1.4.11),
+            surface-to-surface: a floor per pair, see SURFACES in this file
+
+NOTE. --ink-2 and --ink-3 do not clear AA on --paper: the desk is 2:1 below the sheet,
+      which is the whole point of the repair. tokens.css states the consequence as a
+      rule (only --ink may be set on --paper) and the screenshot harness asserts it on
+      every frame it shoots (`onPaper` in 04-polish/fixture-server.ts) rather than
+      trusting it. Those two pairs are therefore not in TEXT below.
+
+############ LIGHT
+
+  --- SURFACE-TO-SURFACE, light (was -> now; floor) ---
+   ok  --paper        vs --sheet          1.18 ->  2.00  (floor 1.80)  the app card / splash card / standings ledger on the page ground
+        drawn by: 1px --rule-strong + --shadow-1
+   ok  --paper        vs --sheet-raised   1.29 ->  2.16  (floor 1.80)  THE RESULT SHEET on the page ground - the reported defect
+        drawn by: 1px --rule-strong + --shadow-1
+   ok  --sheet        vs --groove         1.34 ->  1.41  (floor 1.35)  recessed strips: controls bar, clue head, board heads, crossed time/item chip
+        drawn by: 1px --rule-strong on every groove edge
+   ok  --groove       vs --sheet-raised   1.46 ->  1.52  (floor 1.35)  your leaderboard row inside the result sheet / the slip's head rail
+        drawn by: inset 3px --ink bar (your row); 1px --rule-strong (rail)
+   ok  --sheet        vs --sheet-raised   1.09 ->  1.08  (floor 1.00)  the hint slip / toast / ladder card / coach tip inside the sheet
+        drawn by: CAPPED BY WHITE - carried entirely by 1px --rule-strong, a 3px --ink-3 left rule and --shadow-1
+   ok  --paper        vs --groove         1.13 ->  1.42  (floor 1.20)  the controls bar meeting the card edge on a desktop
+        drawn by: 1px --rule-strong
+  --- text (>= 4.5) ---
+   ok  --ink          #1B1815 on --paper          #BEAD8C    8.03   body text on the page ground
+   ok  --ink          #1B1815 on --sheet          #F8F4EB   16.10   clue text at full strength, board figures, names
+   ok  --ink          #1B1815 on --sheet-raised   #FFFDF8   17.39   result sheet body, hint slip body, ladder card
+   ok  --ink          #1B1815 on --groove         #D9CFBA   11.43   casebar meters, controls, your leaderboard row, crossed time/item chip
+   ok  --ink          #1B1815 on --stamp-wash     #E4C8BD   11.19   the contradicted clue row
+   ok  --ink-2        #4A433A on --sheet          #F8F4EB    8.88   clue text, splash rules, ghost button label
+   ok  --ink-2        #4A433A on --sheet-raised   #FFFDF8    9.59   slip / result secondary text
+   ok  --ink-2        #4A433A on --groove         #D9CFBA    6.30   epilogue values, the hollow FLAGGED tag on your row
+   ok  --ink-3        #5C5446 on --sheet          #F8F4EB    6.80   caps labels, boardhelp, satisfied clue text, column heads
+   ok  --ink-3        #5C5446 on --sheet-raised   #FFFDF8    7.35   slip caps header, envelope countdown, disabled button
+   ok  --ink-3        #5C5446 on --groove         #D9CFBA    4.83   clue-panel head, controls caps, board row/col heads, footer note
+   ok  --ink-inv      #FFFDF8 on --ink            #1B1815   17.39   primary button label, the You tag
+   ok  --ink-inv      #FFFDF8 on --ink-2          #4A433A    9.59   primary button label on hover
+   ok  --stamp        #9E2B1C on --sheet          #F8F4EB    6.79   tier stamp on the splash card, CLOSED / SEALED on a sheet
+   ok  --stamp        #9E2B1C on --sheet-raised   #FFFDF8    7.34   CLOSED and SEALED on the result sheet
+   ok  --stamp        #9E2B1C on --groove         #D9CFBA    4.82   a red mark landing on a recessed strip
+   ok  --stamp        #9E2B1C on --stamp-wash     #E4C8BD    4.72   the contradicted-clue flag line
+   ok  --stamp-ink    #FFFDF8 on --stamp          #9E2B1C    7.34   the filled number box of a contradicted clue
+   ok  --sheet        #F8F4EB on --ink-3          #5C5446    6.80   the numeral inside a satisfied clue's filled box
+   ok  --coat-r-ink   #100D0A on --coat-r         #D55E00    5.01   letter R on a live red coat
+   ok  --coat-b-ink   #FFFDF8 on --coat-b         #0072B2    5.10   letter B on a live blue coat
+   ok  --coat-g-ink   #100D0A on --coat-g         #009E73    5.66   letter G on a live green coat
+   ok  --coat-p-ink   #100D0A on --coat-p         #CC79A7    6.33   letter P on a live purple coat
+   ok  --ink          #1B1815 on --coat-r-out     #F0D3B7   12.38   letter R on a ruled-out red wash
+   ok  --ink          #1B1815 on --coat-b-out     #C1D7DE   11.82   letter B on a ruled-out blue wash
+   ok  --ink          #1B1815 on --coat-g-out     #C1E1D1   12.59   letter G on a ruled-out green wash
+   ok  --ink          #1B1815 on --coat-p-out     #EED9DC   13.13   letter P on a ruled-out purple wash
+   ok  --ink-3        #5C5446 on --groove         #D9CFBA    4.83   the glyph of a ruled-out time / item chip
+  --- non-text (>= 3.0) ---
+   ok  --rule-strong  #655B47 on --paper          #BEAD8C    3.04   control boundary on the page ground
+   ok  --rule-strong  #655B47 on --sheet          #F8F4EB    6.09   chip borders, buttons, board grid, tab rail
+   ok  --rule-strong  #655B47 on --sheet-raised   #FFFDF8    6.58   slip / result / ladder boundaries, the pinned you-row
+   ok  --rule-strong  #655B47 on --groove         #D9CFBA    4.33   controls-bar buttons, board head cells
+   ok  --ink          #1B1815 on --sheet          #F8F4EB   16.10   the 'circled in pen' deduced ring, the filled tick
+   ok  --ink          #1B1815 on --sheet-raised   #FFFDF8   17.39   the filled histogram bar, the solid vote segment
+   ok  --ink          #1B1815 on --groove         #D9CFBA   11.43   the inset bar on your leaderboard row
+   ok  --strike       #4A433A on --coat-r-out     #F0D3B7    6.82   the pen stroke over a red candidate
+   ok  --strike       #4A433A on --coat-b-out     #C1D7DE    6.52   the pen stroke over a blue candidate
+   ok  --strike       #4A433A on --coat-g-out     #C1E1D1    6.94   the pen stroke over a green candidate
+   ok  --strike       #4A433A on --coat-p-out     #EED9DC    7.24   the pen stroke over a purple candidate
+   ok  --strike       #4A433A on --groove         #D9CFBA    6.30   the pen stroke over a time / item candidate
+   ok  --stamp        #9E2B1C on --sheet          #F8F4EB    6.79   the 3px left rule of a contradicted clue
+  --- decorative (deliberately below 3.0; never an indicator) ---
+   decor --rule       #BEB299 on --sheet          #F8F4EB   1.48 ->  1.91
+   decor --rule       #BEB299 on --sheet-raised   #FFFDF8   1.62 ->  2.06
+  --- CVD, coat fills (worst pair, dE00) ---
+      normal    37.0  (R vs P)
+      deutan    15.7  (G vs P)
+      protan    16.5  (B vs P)
+      tritan    10.7  (B vs G)
+  --- CVD, crossed-out washes (collapse expected; letter+position carry identity) ---
+      normal    11.2  (B vs G)
+      deutan     2.1  (G vs P)
+      protan     4.9  (G vs P)
+      tritan     1.9  (B vs G)
+  --- alive vs crossed, same coat = the state channel ---
+      R: normal  31.8 · deutan  25.8 · protan  31.4 · tritan  30.2   (luminance ratio 2.71:1)
+      B: normal  35.7 · deutan  38.0 · protan  35.5 · tritan  33.5   (luminance ratio 3.47:1)
+      G: normal  26.1 · deutan  24.4 · protan  22.2 · tritan  25.4   (luminance ratio 2.44:1)
+      P: normal  26.4 · deutan  19.6 · protan  25.0 · tritan  24.3   (luminance ratio 2.27:1)
+
+############ DARK
+
+  --- SURFACE-TO-SURFACE, dark (was -> now; floor) ---
+   CAP --paper        vs --sheet          1.07 ->  1.29  (floor 1.80)  the app card / splash card / standings ledger on the page ground
+        drawn by: 1px --rule-strong + --shadow-1
+   CAP --paper        vs --sheet-raised   1.17 ->  1.61  (floor 1.80)  THE RESULT SHEET on the page ground - the reported defect
+        drawn by: 1px --rule-strong + --shadow-1
+   CAP --sheet        vs --groove         1.11 ->  1.20  (floor 1.35)  recessed strips: controls bar, clue head, board heads, crossed time/item chip
+        drawn by: 1px --rule-strong on every groove edge
+   ok  --groove       vs --sheet-raised   1.22 ->  1.50  (floor 1.35)  your leaderboard row inside the result sheet / the slip's head rail
+        drawn by: inset 3px --ink bar (your row); 1px --rule-strong (rail)
+   ok  --sheet        vs --sheet-raised   1.09 ->  1.25  (floor 1.00)  the hint slip / toast / ladder card / coach tip inside the sheet
+        drawn by: CAPPED BY WHITE - carried entirely by 1px --rule-strong, a 3px --ink-3 left rule and --shadow-1
+   CAP --paper        vs --groove         1.04 ->  1.07  (floor 1.20)  the controls bar meeting the card edge on a desktop
+        drawn by: 1px --rule-strong
+  --- text (>= 4.5) ---
+   ok  --ink          #F2ECE0 on --paper          #0A0907   16.92   body text on the page ground
+   ok  --ink          #F2ECE0 on --sheet          #2A2419   13.08   clue text at full strength, board figures, names
+   ok  --ink          #F2ECE0 on --sheet-raised   #3B3422   10.50   result sheet body, hint slip body, ladder card
+   ok  --ink          #F2ECE0 on --groove         #16130E   15.75   casebar meters, controls, your leaderboard row, crossed time/item chip
+   ok  --ink          #F2ECE0 on --stamp-wash     #483427    9.94   the contradicted clue row
+   ok  --ink-2        #D2C8B5 on --sheet          #2A2419    9.28   clue text, splash rules, ghost button label
+   ok  --ink-2        #D2C8B5 on --sheet-raised   #3B3422    7.45   slip / result secondary text
+   ok  --ink-2        #D2C8B5 on --groove         #16130E   11.18   epilogue values, the hollow FLAGGED tag on your row
+   ok  --ink-3        #A89E87 on --sheet          #2A2419    5.79   caps labels, boardhelp, satisfied clue text, column heads
+   ok  --ink-3        #A89E87 on --sheet-raised   #3B3422    4.65   slip caps header, envelope countdown, disabled button
+   ok  --ink-3        #A89E87 on --groove         #16130E    6.97   clue-panel head, controls caps, board row/col heads, footer note
+   ok  --ink-inv      #16130E on --ink            #F2ECE0   15.75   primary button label, the You tag
+   ok  --ink-inv      #16130E on --ink-2          #D2C8B5   11.18   primary button label on hover
+   ok  --stamp        #E8886F on --sheet          #2A2419    6.00   tier stamp on the splash card, CLOSED / SEALED on a sheet
+   ok  --stamp        #E8886F on --sheet-raised   #3B3422    4.81   CLOSED and SEALED on the result sheet
+   ok  --stamp        #E8886F on --groove         #16130E    7.22   a red mark landing on a recessed strip
+   ok  --stamp        #E8886F on --stamp-wash     #483427    4.56   the contradicted-clue flag line
+   ok  --stamp-ink    #16130E on --stamp          #E8886F    7.22   the filled number box of a contradicted clue
+   ok  --sheet        #2A2419 on --ink-3          #A89E87    5.79   the numeral inside a satisfied clue's filled box
+   ok  --coat-r-ink   #100D0A on --coat-r         #D55E00    5.01   letter R on a live red coat
+   ok  --coat-b-ink   #100D0A on --coat-b         #56B4E9    8.40   letter B on a live blue coat
+   ok  --coat-g-ink   #100D0A on --coat-g         #009E73    5.66   letter G on a live green coat
+   ok  --coat-p-ink   #100D0A on --coat-p         #CC79A7    6.33   letter P on a live purple coat
+   ok  --ink          #F2ECE0 on --coat-r-out     #5A3412    9.23   letter R on a ruled-out red wash
+   ok  --ink          #F2ECE0 on --coat-b-out     #364C53    7.71   letter B on a ruled-out blue wash
+   ok  --ink          #F2ECE0 on --coat-g-out     #1E4632    9.03   letter G on a ruled-out green wash
+   ok  --ink          #F2ECE0 on --coat-p-out     #573C41    8.39   letter P on a ruled-out purple wash
+   ok  --ink-3        #A89E87 on --groove         #16130E    6.97   the glyph of a ruled-out time / item chip
+  --- non-text (>= 3.0) ---
+   ok  --rule-strong  #968B75 on --paper          #0A0907    5.92   control boundary on the page ground
+   ok  --rule-strong  #968B75 on --sheet          #2A2419    4.58   chip borders, buttons, board grid, tab rail
+   ok  --rule-strong  #968B75 on --sheet-raised   #3B3422    3.67   slip / result / ladder boundaries, the pinned you-row
+   ok  --rule-strong  #968B75 on --groove         #16130E    5.51   controls-bar buttons, board head cells
+   ok  --ink          #F2ECE0 on --sheet          #2A2419   13.08   the 'circled in pen' deduced ring, the filled tick
+   ok  --ink          #F2ECE0 on --sheet-raised   #3B3422   10.50   the filled histogram bar, the solid vote segment
+   ok  --ink          #F2ECE0 on --groove         #16130E   15.75   the inset bar on your leaderboard row
+   ok  --strike       #D2C8B5 on --coat-r-out     #5A3412    6.55   the pen stroke over a red candidate
+   ok  --strike       #D2C8B5 on --coat-b-out     #364C53    5.47   the pen stroke over a blue candidate
+   ok  --strike       #D2C8B5 on --coat-g-out     #1E4632    6.41   the pen stroke over a green candidate
+   ok  --strike       #D2C8B5 on --coat-p-out     #573C41    5.95   the pen stroke over a purple candidate
+   ok  --strike       #D2C8B5 on --groove         #16130E   11.18   the pen stroke over a time / item candidate
+   ok  --stamp        #E8886F on --sheet          #2A2419    6.00   the 3px left rule of a contradicted clue
+  --- decorative (deliberately below 3.0; never an indicator) ---
+   decor --rule       #554D3D on --sheet          #2A2419   1.30 ->  1.84
+   decor --rule       #554D3D on --sheet-raised   #3B3422   1.19 ->  1.48
+  --- CVD, coat fills (worst pair, dE00) ---
+      normal    34.7  (B vs G)
+      deutan    15.7  (G vs P)
+      protan    13.6  (B vs P)
+      tritan    10.4  (B vs G)
+  --- CVD, crossed-out washes (collapse expected; letter+position carry identity) ---
+      normal    15.9  (B vs G)
+      deutan     3.8  (G vs P)
+      protan     7.2  (B vs P)
+      tritan     4.2  (B vs G)
+  --- alive vs crossed, same coat = the state channel ---
+      R: normal  28.6 · deutan  31.4 · protan  24.8 · tritan  28.0   (luminance ratio 2.81:1)
+      B: normal  41.4 · deutan  40.3 · protan  42.5 · tritan  41.4   (luminance ratio 3.93:1)
+      G: normal  30.3 · deutan  26.2 · protan  30.2 · tritan  30.0   (luminance ratio 3.10:1)
+      P: normal  33.8 · deutan  35.1 · protan  31.6 · tritan  32.2   (luminance ratio 3.22:1)
+
+CAP  --paper vs --sheet = 1.29:1 (floor 1.8) - the app card / splash card / standings ledger on the page ground
+CAP  --paper vs --sheet-raised = 1.61:1 (floor 1.8) - THE RESULT SHEET on the page ground - the reported defect
+CAP  --sheet vs --groove = 1.2:1 (floor 1.35) - recessed strips: controls bar, clue head, board heads, crossed time/item chip
+CAP  --paper vs --groove = 1.07:1 (floor 1.2) - the controls bar meeting the card edge on a desktop
+      A CAP is not a failure: it is a pair the palette cannot separate by lightness
+      without breaking AA text, and the line above names what draws the edge instead.
+RESULT: every text pair passes AA, every information-bearing boundary passes 3:1

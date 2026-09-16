@@ -1,0 +1,837 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Deducto — D3 (Manila) prototype</title>
+<style>
+/* ═══════════════════════════════════════════════════════════════════════════
+   DEDUCTO · D3 "MANILA" — design tokens
+   Light is the base; dark via prefers-color-scheme (and [data-theme] for shots).
+   Every value here is reproduced in docs/10-design-spec.md with its contrast.
+   ═══════════════════════════════════════════════════════════════════════════ */
+:root {
+  color-scheme: light dark;
+
+  /* ---- surfaces: higher = lighter, in BOTH themes ---- */
+  --paper:        #E7DFD1;   /* the folder / page ground        */
+  --sheet:        #F6F2E9;   /* a sheet laid on it: panels      */
+  --sheet-raised: #FFFCF6;   /* raised sheet: result, hover     */
+  --groove:       #DBD2C1;   /* recessed strip: bars, th, empty */
+
+  /* ---- ink: exactly three reading steps + one inverse ---- */
+  --ink:     #1B1815;
+  --ink-2:   #4A433A;
+  --ink-3:   #5C5446;
+  --ink-inv: #FFFCF6;
+
+  /* ---- lines ---- */
+  --rule:        #D2C8B5;   /* decorative hairline, no meaning   */
+  --rule-strong: #7E725C;   /* structure + control boundaries    */
+  --strike:      #4A433A;   /* the pen stroke over a ruled-out candidate */
+
+  /* ---- the one accent: archive red ---- */
+  --stamp:      #9E2B1C;
+  --stamp-ink:  #FFFCF6;
+  --stamp-wash: #EEE0D7;
+
+  /* ---- evidence: coats (Okabe-Ito) ---- */
+  --coat-r: #D55E00; --coat-r-ink: #100D0A; --coat-r-out: #EFD1B6;
+  --coat-b: #0072B2; --coat-b-ink: #FFFCF6; --coat-b-out: #C0D6DD;
+  --coat-g: #009E73; --coat-g-ink: #100D0A; --coat-g-out: #C0E0CF;
+  --coat-p: #CC79A7; --coat-p-ink: #100D0A; --coat-p-out: #EDD7DA;
+
+  /* ---- type ---- */
+  --font-sans:  -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono:  ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --font-serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, "Times New Roman", serif;
+
+  --fs-2xs: 11px; --fs-xs: 12px; --fs-sm: 13px; --fs-base: 15px;
+  --fs-md: 17px;  --fs-lg: 21px; --fs-xl: 26px; --fs-2xl: 34px;
+  --ls-caps: .12em;
+
+  /* ---- spacing (4pt) ---- */
+  --sp-0: 2px; --sp-1: 4px; --sp-2: 8px; --sp-3: 12px;
+  --sp-4: 16px; --sp-5: 24px; --sp-6: 32px; --sp-7: 48px;
+
+  /* ---- radii: paper has two ---- */
+  --r-0: 0; --r-1: 2px;
+
+  /* ---- component sizing ---- */
+  --chip: 34px;
+  --tap: 44px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #14120F; --sheet: #1C1915; --sheet-raised: #25211B; --groove: #0E0C0A;
+    --ink: #F0EADE; --ink-2: #C6BCA9; --ink-3: #948B7B; --ink-inv: #14120F;
+    --rule: #332E26; --rule-strong: #756C5B; --strike: #C6BCA9;
+    --stamp: #E27A62; --stamp-ink: #14120F; --stamp-wash: #382720;
+    --coat-b: #56B4E9; --coat-b-ink: #100D0A;
+    --coat-r-out: #502C0F; --coat-b-out: #2C4450; --coat-g-out: #143E2F; --coat-p-out: #4D343E;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #14120F; --sheet: #1C1915; --sheet-raised: #25211B; --groove: #0E0C0A;
+  --ink: #F0EADE; --ink-2: #C6BCA9; --ink-3: #948B7B; --ink-inv: #14120F;
+  --rule: #332E26; --rule-strong: #756C5B; --strike: #C6BCA9;
+  --stamp: #E27A62; --stamp-ink: #14120F; --stamp-wash: #382720;
+  --coat-b: #56B4E9; --coat-b-ink: #100D0A;
+  --coat-r-out: #502C0F; --coat-b-out: #2C4450; --coat-g-out: #143E2F; --coat-p-out: #4D343E;
+}
+
+/* ═══ prototype only: freeze motion so screenshots are byte-stable ═══ */
+*, *::before, *::after { animation: none !important; transition: none !important; }
+
+/* ═══════════════════════════ base ═══════════════════════════ */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  background: var(--paper); color: var(--ink);
+  font: var(--fs-base)/1.5 var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+button, input, select { font: inherit; color: inherit; }
+button { background: none; border: none; cursor: pointer; touch-action: manipulation; }
+:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+svg { display: block; }
+.num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+/* ═══════════════════════════ primitives ═══════════════════════════ */
+
+/* caps label — mono, letter-spaced. Replaces every emoji label in the chrome. */
+.caps { font: 700 var(--fs-2xs)/1 var(--font-mono); letter-spacing: var(--ls-caps);
+        text-transform: uppercase; color: var(--ink-3); }
+
+/* stamp — a boxed, letter-spaced, slightly rotated mono mark. Not a badge. */
+.stamp { display: inline-block; font: 800 var(--fs-2xs)/1 var(--font-mono); letter-spacing: var(--ls-caps);
+         text-transform: uppercase; padding: 4px 6px; border: 1.5px solid currentColor;
+         border-radius: var(--r-1); transform: rotate(-3deg); white-space: nowrap; color: var(--ink-3); }
+.stamp.red   { color: var(--stamp); }
+.stamp.solid { background: var(--stamp); border-color: var(--stamp); color: var(--stamp-ink); }
+.stamp.lg    { font-size: var(--fs-sm); padding: 6px 9px; border-width: 2px; }
+
+/* rules */
+.hr { height: 1px; background: var(--rule); border: 0; }
+.hr-ink { height: 1px; background: var(--rule-strong); border: 0; }
+
+/* section heading: caps label + a rule that runs to the edge */
+.sec { display: flex; align-items: center; gap: var(--sp-3); margin: var(--sp-4) 0 var(--sp-2); }
+.sec::after { content: ""; flex: 1; height: 1px; background: var(--rule); }
+
+/* buttons */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-2);
+       min-height: var(--tap); padding: 0 var(--sp-4); border-radius: var(--r-1);
+       font: 600 var(--fs-base)/1 var(--font-sans); border: 1px solid transparent; }
+.btn--primary   { background: var(--ink); color: var(--ink-inv); border-color: var(--ink); }
+.btn--primary:hover { background: var(--ink-2); border-color: var(--ink-2); }
+.btn--secondary { border-color: var(--rule-strong); color: var(--ink); }
+.btn--secondary:hover { background: var(--sheet-raised); }
+.btn--ghost     { color: var(--ink-2); }
+.btn--ghost:hover { background: var(--groove); color: var(--ink); }
+.btn--icon { min-width: var(--tap); padding: 0; }
+.btn--danger:hover { color: var(--stamp); border-color: var(--stamp); background: transparent; }
+.btn[disabled] { color: var(--ink-3); border-color: var(--rule); cursor: default; }
+
+/* progress ticks — 12 squares, countable, achromatic */
+.ticks { display: inline-flex; gap: 3px; align-items: center; }
+.ticks i { width: 7px; height: 7px; border: 1px solid var(--rule-strong); }
+.ticks i.on { background: var(--ink); border-color: var(--ink); }
+
+/* ═══════════════════════════ shell ═══════════════════════════ */
+.screen { min-height: 100vh; display: flex; flex-direction: column; }
+.screen[hidden] { display: none !important; }
+/* the case file itself: full-bleed on a phone, a sheet on the desk on a large screen */
+.file { flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--sheet); }
+@media (min-width: 720px) {
+  :root { --chip: 44px; }
+  .screen { padding: var(--sp-5) var(--sp-4); justify-content: center; }
+  .file { flex: none; width: 100%; max-width: 1040px; margin: 0 auto;
+          max-height: calc(100vh - 48px); border: 1px solid var(--rule-strong); }
+}
+.wrap { width: 100%; max-width: 1040px; margin: 0 auto; padding: 0 var(--sp-3); }
+.sheet { background: var(--sheet); border: 1px solid var(--rule); }
+
+/* ── file header: case stamp block ───────────────────────────── */
+.fhead { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-3); padding: var(--sp-2) var(--sp-3);
+         background: var(--sheet); border-bottom: 1px solid var(--rule-strong); }
+.fhead .cno { font: 700 var(--fs-2xs)/1 var(--font-mono); letter-spacing: var(--ls-caps); color: var(--ink-2); white-space: nowrap; }
+.fhead .ctitle { font: 600 var(--fs-md)/1.2 var(--font-serif); letter-spacing: -.01em;
+                 flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fhead .meters { display: flex; align-items: center; gap: var(--sp-3); margin-left: auto; }
+.meter { display: flex; align-items: center; gap: var(--sp-2); }
+.meter .v { font: 700 var(--fs-xs)/1 var(--font-mono); font-variant-numeric: tabular-nums; color: var(--ink); }
+.meter .k { font: 700 9px/1 var(--font-mono); letter-spacing: var(--ls-caps); text-transform: uppercase; color: var(--ink-3); }
+
+/* ── main split ──────────────────────────────────────────────── */
+.body { flex: 1; display: flex; min-height: 0; background: var(--sheet); }
+.cluecol { width: clamp(250px, 30%, 330px); flex: none; border-right: 1px solid var(--rule);
+           display: flex; flex-direction: column; background: var(--sheet); }
+.cluehead { display: flex; align-items: baseline; gap: var(--sp-2); padding: var(--sp-2) var(--sp-3) var(--sp-1);
+            border-bottom: 1px solid var(--rule); background: var(--groove); }
+.cluehead .tally { margin-left: auto; font: 700 var(--fs-2xs)/1 var(--font-mono); letter-spacing: .06em; color: var(--ink-3); }
+.cluehead .tally b { color: var(--stamp); }
+.cluelist { flex: 1; min-height: 0; }
+
+/* a clue: number box + text, status by shape first */
+.clue { display: flex; gap: var(--sp-2); align-items: flex-start;
+        padding: 7px var(--sp-3) 7px 9px; border-left: 3px solid transparent;
+        border-bottom: 1px solid var(--rule); font-size: var(--fs-sm); line-height: 1.4; color: var(--ink-2); }
+.clue .n { flex: none; width: 17px; height: 17px; margin-top: 1px; border: 1px solid var(--rule-strong);
+           font: 700 10px/15px var(--font-mono); text-align: center; color: var(--ink-3); border-radius: var(--r-1); }
+.clue--ok        { color: var(--ink-3); }
+.clue--ok .t     { text-decoration: line-through; text-decoration-thickness: 1px; }
+.clue--ok .n     { background: var(--ink-3); border-color: var(--ink-3); color: var(--sheet); }
+.clue--bad       { color: var(--ink); background: var(--stamp-wash); border-left-color: var(--stamp); }
+.clue--bad .n    { background: var(--stamp); border-color: var(--stamp); color: var(--stamp-ink); }
+.clue .flag { display: none; }
+.clue--bad .flag { display: block; font: 700 9px/1 var(--font-mono); letter-spacing: var(--ls-caps);
+                   color: var(--stamp); margin-top: 3px; }
+
+/* ── the board ───────────────────────────────────────────────── */
+.boardcol { flex: 1; min-width: 0; display: flex; flex-direction: column;
+            justify-content: center; padding: var(--sp-3); gap: var(--sp-2); }
+
+table.grid { border-collapse: collapse; margin: 0 auto; }
+.grid th, .grid td { border: 1px solid var(--rule); padding: 0; }
+.grid thead th { border-color: var(--rule); background: var(--groove);
+                 font: 700 var(--fs-2xs)/1 var(--font-mono); letter-spacing: var(--ls-caps);
+                 color: var(--ink-3); text-transform: uppercase; padding: 6px 0; }
+.grid thead th.corner { background: var(--groove); border-left-color: transparent; border-top-color: transparent; }
+.grid th.rowh { background: var(--groove); text-align: left; padding: 0 var(--sp-2) 0 var(--sp-2);
+                font: 600 var(--fs-sm)/1 var(--font-sans); color: var(--ink); white-space: nowrap; min-width: 84px; }
+.grid th.rowh .mk { display: inline-block; width: 8px; height: 8px; margin-right: 7px;
+                    border: 1px solid var(--rule-strong); vertical-align: 0; }
+.grid tr.done th.rowh .mk { background: var(--ink); border-color: var(--ink); }
+.grid td.cell { padding: 5px; }
+.cellrow { display: flex; gap: 4px; justify-content: center; }
+.boardcol { overflow-x: hidden; }
+.boardhelp { text-align: center; font: 600 var(--fs-2xs)/1.5 var(--font-mono); letter-spacing: .06em;
+             text-transform: uppercase; color: var(--ink-3); }
+.boardhelp b { color: var(--ink-2); font-weight: 700; }
+
+/* narrow board: suspect block, category rows */
+.nboard { display: none; }
+.nsus { border: 1px solid var(--rule); border-bottom: 0; }
+.nsus:last-child { border-bottom: 1px solid var(--rule); }
+.nsus .nname { display: flex; align-items: center; gap: 7px; padding: 3px var(--sp-2);
+               background: var(--groove); font: 600 var(--fs-sm)/1.4 var(--font-sans); }
+.nsus .nname .mk { width: 8px; height: 8px; border: 1px solid var(--rule-strong); flex: none; }
+.nsus.done .nname .mk { background: var(--ink); border-color: var(--ink); }
+.nsus .ncats { display: flex; }
+.nsus .ncat { flex: 1; min-width: 0; padding: 4px 3px; }
+.nsus .ncat + .ncat { border-left: 1px solid var(--rule); }
+.ncolh { display: flex; }
+.ncolh span { flex: 1; text-align: center; font: 700 9px/1 var(--font-mono);
+              letter-spacing: var(--ls-caps); color: var(--ink-3); padding: 4px 0; }
+.ncolh span:first-child { }
+
+/* ── chips: the evidence layer, the only colour in the interface ── */
+.chip { position: relative; width: var(--chip); height: var(--chip); flex: none;
+        display: inline-flex; align-items: center; justify-content: center;
+        border: 1px solid var(--rule-strong); border-radius: var(--r-1);
+        font: 800 var(--fs-sm)/1 var(--font-mono); background: var(--sheet); color: var(--ink);
+        user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.chip::before { content: ""; position: absolute; inset: -6px -3px; }  /* tap area to ≥44 */
+.chip.c-R { background: var(--coat-r); color: var(--coat-r-ink); border-color: var(--coat-r); }
+.chip.c-B { background: var(--coat-b); color: var(--coat-b-ink); border-color: var(--coat-b); }
+.chip.c-G { background: var(--coat-g); color: var(--coat-g-ink); border-color: var(--coat-g); }
+.chip.c-P { background: var(--coat-p); color: var(--coat-p-ink); border-color: var(--coat-p); }
+.chip.t-  { font-size: var(--fs-xs); letter-spacing: -.02em; }
+.chip.i-  { font-size: var(--fs-md); }
+
+/* struck out = pen stroke: hue drops to a wash, letter stays, line crosses it */
+.chip.out { color: var(--ink-3); border-color: var(--rule-strong); background: var(--groove); font-weight: 600; }
+.chip.out.c-R { background: var(--coat-r-out); }
+.chip.out.c-B { background: var(--coat-b-out); }
+.chip.out.c-G { background: var(--coat-g-out); }
+.chip.out.c-P { background: var(--coat-p-out); }
+.chip.out.c-R, .chip.out.c-B, .chip.out.c-G, .chip.out.c-P { color: var(--ink); }
+.chip.out::after { content: ""; position: absolute; left: -1px; right: -1px; top: 50%;
+                   height: 2px; background: var(--strike); transform: translateY(-50%) rotate(-38deg); }
+.chip.out.i- { opacity: 1; }
+.chip.out.i- .g { opacity: .55; }
+
+/* deduced = circled in pen. Achromatic, so it survives every CVD and greyscale. */
+.chip.kept { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+/* ── controls bar ────────────────────────────────────────────── */
+.controls { display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-2) var(--sp-3);
+            background: var(--groove); border-top: 1px solid var(--rule-strong); }
+.controls .spacer { flex: 1; }
+
+/* ── hint slip: a margin annotation, no hue ──────────────────── */
+.slip { border-left: 3px solid var(--ink-3); background: var(--sheet-raised);
+        border-top: 1px solid var(--rule); border-right: 1px solid var(--rule);
+        border-bottom: 1px solid var(--rule); padding: var(--sp-2) var(--sp-3); }
+.slip .caps { margin-bottom: 3px; }
+.slip .txt { font-size: var(--fs-sm); color: var(--ink); }
+
+/* ═══════════════════════════ splash ═══════════════════════════ */
+.splash { flex: 1; display: flex; align-items: center; justify-content: center; padding: var(--sp-3); }
+.splash .card { width: 100%; max-width: 560px; background: var(--sheet); border: 1px solid var(--rule-strong);
+                padding: var(--sp-4) var(--sp-4) var(--sp-3); }
+.splash .top { display: flex; align-items: flex-start; gap: var(--sp-3); }
+.wordmark { font: 800 var(--fs-sm)/1 var(--font-mono); letter-spacing: .3em; text-transform: uppercase; color: var(--ink); }
+.splash .cno { font: 700 var(--fs-2xs)/1 var(--font-mono); letter-spacing: var(--ls-caps); color: var(--stamp); }
+.splash h1 { font: 600 var(--fs-xl)/1.15 var(--font-serif); letter-spacing: -.015em; margin: var(--sp-1) 0 var(--sp-2); }
+.splash .rules { font-size: var(--fs-sm); color: var(--ink-2); max-width: 46ch; }
+.splash .cta { display: flex; gap: var(--sp-2); margin-top: var(--sp-4); }
+.splash .cta .btn--primary { flex: 1; }
+.splash .social { display: flex; flex-wrap: wrap; gap: 3px var(--sp-3); margin-top: var(--sp-3);
+                  padding-top: var(--sp-2); border-top: 1px solid var(--rule); }
+.splash .social span { font: 600 var(--fs-2xs)/1.4 var(--font-mono); letter-spacing: .06em; color: var(--ink-3); }
+.splash .social b { color: var(--ink-2); font-weight: 700; }
+
+/* ═══════════════════════════ result ═══════════════════════════ */
+.scrim { position: fixed; inset: 0; background: color-mix(in srgb, var(--paper) 76%, transparent);
+         display: flex; align-items: flex-start; justify-content: center; padding: var(--sp-3); overflow: auto; }
+.result { position: relative; width: 100%; max-width: 620px; background: var(--sheet-raised);
+          border: 1px solid var(--rule-strong); padding: var(--sp-4); }
+.result .closestamp { position: absolute; top: 10px; right: var(--sp-4); }
+.result .rclose { position: absolute; top: 6px; left: 6px; color: var(--ink-3); }
+.hero { text-align: center; padding: var(--sp-2) 0 var(--sp-3); border-bottom: 1px solid var(--rule); }
+.hero .k { font: 600 var(--fs-2xs)/1 var(--font-mono); letter-spacing: var(--ls-caps); text-transform: uppercase; color: var(--ink-3); }
+.hero .time { font: 700 var(--fs-2xl)/1 var(--font-mono); font-variant-numeric: tabular-nums; margin: 6px 0 2px; }
+.hero .sub { font: 400 var(--fs-md)/1.3 var(--font-serif); color: var(--ink-2); }
+.facts { display: flex; flex-wrap: wrap; gap: 0; margin-top: var(--sp-3); border: 1px solid var(--rule); }
+.fact { flex: 1 1 33%; min-width: 92px; padding: var(--sp-2) var(--sp-3); }
+.fact + .fact { border-left: 1px solid var(--rule); }
+.fact .k { font: 700 9px/1 var(--font-mono); letter-spacing: var(--ls-caps); text-transform: uppercase; color: var(--ink-3); }
+.fact .v { font: 700 var(--fs-md)/1.2 var(--font-mono); font-variant-numeric: tabular-nums; margin-top: 3px; }
+.fact .v.sm { font: 600 var(--fs-sm)/1.3 var(--font-sans); }
+
+/* histogram — one series, achromatic; "you" is the filled bar */
+.hist { display: flex; align-items: flex-end; gap: 6px; height: 74px; }
+.hist .bin { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; height: 100%; }
+.hist .bar { width: 100%; max-width: 30px; background: var(--groove); border: 1px solid var(--rule-strong); }
+.hist .bin.you .bar { background: var(--ink); border-color: var(--ink); }
+.histx { display: flex; gap: 6px; border-top: 1px solid var(--rule-strong); padding-top: 4px; }
+.histx span { flex: 1; text-align: center; font: 600 9px/1.3 var(--font-mono); color: var(--ink-3); }
+.histx span.you { color: var(--ink); font-weight: 700; }
+.histx span em { display: block; font-style: normal; letter-spacing: var(--ls-caps); }
+
+/* tables (solution, leaderboard) */
+table.rows { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
+.rows th { text-align: left; padding: 5px var(--sp-2); border-bottom: 1px solid var(--rule-strong);
+           font: 700 9px/1 var(--font-mono); letter-spacing: var(--ls-caps); color: var(--ink-3); text-transform: uppercase; }
+.rows td { padding: 7px var(--sp-2); border-bottom: 1px solid var(--rule); color: var(--ink-2); }
+.rows td.name { color: var(--ink); font-weight: 600; }
+.rows td.n { font-family: var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; }
+.rows tr.you td { color: var(--ink); font-weight: 700; background: var(--groove); }
+.rows tr.you td:first-child { box-shadow: inset 3px 0 0 var(--ink); }
+.youtag { font: 700 9px/1 var(--font-mono); letter-spacing: var(--ls-caps); color: var(--ink-inv);
+          background: var(--ink); padding: 2px 4px; margin-left: 6px; border-radius: var(--r-1); }
+
+/* vote + envelope */
+.vote { display: flex; gap: var(--sp-2); }
+.vote .btn { flex: 1; min-height: 38px; font-size: var(--fs-sm); }
+.votebar { display: flex; height: 14px; border: 1px solid var(--rule-strong); margin-top: var(--sp-2); }
+.votebar i { border-right: 1px solid var(--rule-strong); }
+.votebar i:last-child { border-right: 0; }
+.votebar i.a { background: var(--ink); }
+.votebar i.b { background: repeating-linear-gradient(45deg, var(--rule-strong) 0 1px, transparent 1px 4px); }
+.votebar i.c { background: var(--groove); }
+.votelg { display: flex; gap: var(--sp-3); flex-wrap: wrap; margin-top: 5px; }
+.votelg span { font: 600 var(--fs-2xs)/1 var(--font-mono); color: var(--ink-3); }
+.votelg b { color: var(--ink); }
+.envelope { margin-top: var(--sp-2); border: 1px dashed var(--rule-strong); padding: var(--sp-3);
+            display: flex; align-items: center; gap: var(--sp-3); }
+.envelope .et { font: 600 var(--fs-sm)/1.3 var(--font-sans); }
+.envelope .ec { margin-left: auto; font: 700 var(--fs-xs)/1 var(--font-mono); color: var(--ink-3); font-variant-numeric: tabular-nums; }
+
+/* ═══════════════════════════ leaderboard ═══════════════════════════ */
+.tabs { display: flex; gap: var(--sp-4); border-bottom: 1px solid var(--rule-strong); padding: 0 var(--sp-3); background: var(--sheet); }
+.tabs button { padding: var(--sp-3) 0 10px; font: 700 var(--fs-2xs)/1 var(--font-mono);
+               letter-spacing: var(--ls-caps); text-transform: uppercase; color: var(--ink-3);
+               border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--ink); }
+
+/* ═══════════════════════════ loading / error ═══════════════════════════ */
+.centered { flex: 1; display: flex; align-items: center; justify-content: center; padding: var(--sp-4); }
+.centered .card { width: 100%; max-width: 460px; background: var(--sheet);
+                  border: 1px solid var(--rule-strong); padding: var(--sp-5) var(--sp-4); }
+.skel { height: 10px; background: var(--groove); border: 1px solid var(--rule); margin-top: 10px; }
+.errbody { font-size: var(--fs-sm); color: var(--ink-2); margin: var(--sp-3) 0 var(--sp-4); }
+.errcode { font: 600 var(--fs-2xs)/1 var(--font-mono); color: var(--ink-3); letter-spacing: .06em; margin-top: var(--sp-3); }
+
+/* ═══════════════════════════ responsive ═══════════════════════════ */
+@media (max-width: 719px) {
+  :root { --chip: 28px; }
+  .body { flex-direction: column; }
+  .cluecol { width: 100%; border-right: 0; border-bottom: 1px solid var(--rule-strong); }
+  .boardcol { padding: var(--sp-2) 6px; }
+  table.grid { display: none; }
+  .nboard { display: block; width: 100%; }
+  .cellrow { gap: 3px; }
+  .chip::before { inset: -8px -4px; }
+  .fhead .ctitle { font-size: var(--fs-base); }
+  .fhead { gap: var(--sp-2); padding: 6px var(--sp-2) 0; }
+  /* the meters wrap onto their own recessed strip — one component, two placements */
+  .fhead .meters { flex-basis: 100%; margin: 6px -8px 0; padding: 3px var(--sp-2);
+                   background: var(--groove); border-top: 1px solid var(--rule);
+                   justify-content: space-between; gap: var(--sp-2); }
+  .ticks i { width: 6px; height: 6px; }
+  .controls { padding: 6px var(--sp-2) calc(6px + env(safe-area-inset-bottom)); }
+  .btn { padding: 0 var(--sp-3); font-size: var(--fs-sm); }
+  .result { padding: var(--sp-3); }
+  .facts .fact { flex: 1 1 50%; }
+  .splash .card { padding: var(--sp-3); }
+  .splash h1 { font-size: var(--fs-lg); }
+}
+/* phones: the clue list is the elastic part — tighten it before anything else */
+@media (max-width: 719px) and (max-height: 880px) {
+  .clue { padding: 5px var(--sp-3) 5px 8px; line-height: 1.35; }
+  .boardhelp { font-size: 10px; }
+}
+/* short viewports (iPhone SE fullscreen, feed previews): tighten, never scroll */
+@media (max-height: 700px) {
+  :root { --tap: 40px; --fs-base: 14px; }
+  .clue { padding: 4px var(--sp-2) 4px 7px; font-size: var(--fs-xs); line-height: 1.35; }
+  .clue .n { width: 15px; height: 15px; font-size: 9px; line-height: 13px; }
+  .hero .time { font-size: var(--fs-xl); }
+  .splash h1 { font-size: var(--fs-lg); }
+}
+@media (max-height: 700px) {
+  .result { padding: var(--sp-2) var(--sp-3) var(--sp-3); }
+  .hero { padding: var(--sp-1) 0 var(--sp-2); }
+  .hero .sub { font-size: var(--fs-sm); }
+  .facts { margin-top: var(--sp-2); }
+  .fact { padding: 5px var(--sp-2); }
+  .fact .v { font-size: var(--fs-sm); margin-top: 2px; }
+  .sec { margin: var(--sp-2) 0 var(--sp-1); }
+  .hist { height: 46px; }
+  .rows td { padding: 3px var(--sp-2); }
+  .vote .btn { min-height: 32px; }
+  .envelope { padding: 5px var(--sp-2); gap: var(--sp-2); }
+  .envelope .et { font-size: var(--fs-xs); }
+  .slip { padding: 4px var(--sp-2); }
+  .boardhelp { line-height: 1.35; }
+}
+@media (max-height: 700px) and (min-width: 720px) { :root { --chip: 34px; } }
+@media (max-height: 700px) and (max-width: 719px) {
+  :root { --chip: 26px; }
+  .clue { padding: 2px var(--sp-2) 2px 6px; }
+  .cluehead { padding: 3px var(--sp-2) 2px; }
+  .boardcol { padding: 4px 6px; gap: 4px; }
+  .fhead { padding: 4px var(--sp-2) 0; }
+  .fhead .meters { margin-top: 4px; }
+  .controls { padding: 4px var(--sp-2) calc(4px + env(safe-area-inset-bottom)); }
+  .nsus .nname { padding: 1px var(--sp-2); font-size: var(--fs-xs); }
+  .ncolh span { padding: 2px 0; }
+  .nsus .ncat { padding: 3px 2px; }
+}
+
+/* ═══════════════════════════ prototype chrome (not part of the system) ═══ */
+#pchrome { position: fixed; z-index: 99; left: 0; right: 0; bottom: 0; display: flex; flex-wrap: wrap;
+           gap: 4px; padding: 6px 8px; background: #17161a; border-top: 1px solid #3a383f; }
+#pchrome a, #pchrome button.pt { font: 600 11px/1 ui-monospace, monospace; letter-spacing: .06em;
+           color: #cfcdd4; background: #26242b; border: 1px solid #3a383f; padding: 5px 7px;
+           text-decoration: none; border-radius: 2px; }
+#pchrome a.on, #pchrome button.pt.on { background: #cfcdd4; color: #17161a; }
+body.shot #pchrome { display: none; }
+body:not(.shot) .screen { padding-bottom: 44px; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════ SPLASH (in-feed first screen) ═══════════════════ -->
+<div class="screen" data-s="splash" hidden>
+  <div class="splash">
+    <div class="card">
+      <div class="top">
+        <div style="flex:1;min-width:0">
+          <div class="wordmark">Deducto</div>
+          <div class="cno" style="margin-top:8px">CASE 047 · 07 AUG</div>
+          <h1>The Cursed Pizza</h1>
+          <p class="rules">Four suspects crossed Maple Square, one at a time — each in one coat,
+            each carrying one item. Cross out what the clues rule out; the last candidate standing
+            in every cell closes the file.</p>
+        </div>
+        <span class="stamp red lg">Tier&nbsp;II</span>
+      </div>
+      <div class="cta">
+        <button class="btn btn--primary">Open the case file</button>
+        <button class="btn btn--secondary">Standings</button>
+      </div>
+      <div class="social">
+        <span><b>142</b> SOLVED TODAY</span>
+        <span>FASTEST <b>02:41</b></span>
+        <span>YOUR STREAK <b>3</b></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ GAME (4 states share this markup) ═══════════════════ -->
+<div class="screen" data-s="game" hidden>
+  <div class="file">
+  <div class="fhead">
+    <span class="cno">CASE 047</span>
+    <span class="ctitle">The Cursed Pizza</span>
+    <span class="stamp">Tier&nbsp;II</span>
+    <div class="meters">
+      <div class="meter"><span class="ticks" id="g-ticks"></span><span class="v" id="g-prog">00/12</span></div>
+      <div class="meter"><span class="k">Time</span><span class="v" id="g-time">00:00</span></div>
+    </div>
+  </div>
+
+  <div class="body">
+    <div class="cluecol">
+      <div class="cluehead"><span class="caps">Clues</span><span class="tally" id="g-tally"></span></div>
+      <div class="cluelist" id="g-clues"></div>
+      <div id="g-slip"></div>
+    </div>
+    <div class="boardcol">
+      <table class="grid" id="g-grid"></table>
+      <div class="nboard" id="g-nboard"></div>
+      <p class="boardhelp">Tap a candidate to <b>rule it out</b> · the last one standing is the answer</p>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button class="btn btn--ghost btn--icon" title="Undo" aria-label="Undo">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg></button>
+    <button class="btn btn--ghost btn--icon btn--danger" title="Start over" aria-label="Start over">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 5v6h-6"/><path d="M20 11A8 8 0 1 0 18 17"/></svg></button>
+    <button class="btn btn--ghost btn--icon" title="How to play" aria-label="How to play">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.2A2.6 2.6 0 0 1 14.6 10c0 1.7-2.6 2.1-2.6 3.8"/><path d="M12 17.2h.01"/></svg></button>
+    <span class="spacer"></span>
+    <button class="btn btn--secondary" id="g-action">Reveal a cell</button>
+  </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ RESULT ═══════════════════ -->
+<div class="screen" data-s="result" hidden>
+  <div class="file">
+  <div class="fhead">
+    <span class="cno">CASE 047</span>
+    <span class="ctitle">The Cursed Pizza</span>
+    <span class="stamp">Tier&nbsp;II</span>
+    <div class="meters">
+      <div class="meter"><span class="ticks" id="r-ticks"></span><span class="v">12/12</span></div>
+      <div class="meter"><span class="k">Time</span><span class="v">04:31</span></div>
+    </div>
+  </div>
+  <div class="body">
+    <div class="cluecol"><div class="cluehead"><span class="caps">Clues</span><span class="tally">10 SATISFIED</span></div><div class="cluelist" id="r-clues"></div></div>
+    <div class="boardcol"><table class="grid" id="r-grid"></table><div class="nboard" id="r-nboard"></div></div>
+  </div>
+  </div>
+
+  <div class="scrim">
+    <div class="result">
+      <button class="rclose btn btn--ghost btn--icon" aria-label="Close">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+      <span class="stamp red lg closestamp">Closed</span>
+      <div class="hero">
+        <div class="k">Case 047 · solved</div>
+        <div class="time">04:31</div>
+        <div class="sub">Faster than 68% of detectives today</div>
+      </div>
+
+      <div class="facts">
+        <div class="fact"><div class="k">Hints</div><div class="v">1</div></div>
+        <div class="fact"><div class="k">Streak</div><div class="v">3</div></div>
+        <div class="fact"><div class="k">Rank</div><div class="v sm">Inspector<br><span style="color:var(--ink-3);font:600 var(--fs-2xs)/1 var(--font-mono)">4 DAYS TO CHIEF</span></div></div>
+      </div>
+
+      <div class="sec"><span class="caps">Solve times today · 142 detectives</span></div>
+      <div class="hist" id="r-hist"></div>
+      <div class="histx" id="r-histx"></div>
+
+      <div class="sec"><span class="caps">Today's fastest</span></div>
+      <table class="rows">
+        <tbody>
+          <tr><td class="n" style="width:34px">1</td><td class="name">u/quillfox</td><td class="n">02:38</td></tr>
+          <tr><td class="n">2</td><td class="name">u/mimi_deduces</td><td class="n">03:11</td></tr>
+          <tr><td class="n">3</td><td class="name">u/harbor_light</td><td class="n">04:02</td></tr>
+          <tr class="you"><td class="n">17</td><td class="name">u/you<span class="youtag">You</span></td><td class="n">04:31</td></tr>
+        </tbody>
+      </table>
+
+      <div class="sec"><span class="caps">Tomorrow's case — you decide</span></div>
+      <div class="vote">
+        <button class="btn btn--secondary">Harder</button>
+        <button class="btn btn--secondary">Same</button>
+        <button class="btn btn--secondary">Softer</button>
+      </div>
+      <div class="votebar"><i class="a" style="flex:62"></i><i class="b" style="flex:26"></i><i class="c" style="flex:12"></i></div>
+      <div class="votelg"><span>HARDER <b>62%</b></span><span>SAME <b>26%</b></span><span>SOFTER <b>12%</b></span></div>
+      <div class="envelope">
+        <span class="stamp red">Sealed</span>
+        <span class="et">Case 048 · leaning <b>harder</b></span>
+        <span class="ec">OPENS IN 07:12</span>
+      </div>
+
+      <div style="display:flex;gap:8px;margin-top:16px">
+        <button class="btn btn--ghost" style="flex:1">Full solution</button>
+        <button class="btn btn--secondary" style="flex:1">Play this case again</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ LEADERBOARD ═══════════════════ -->
+<div class="screen" data-s="board" hidden>
+  <div class="file">
+  <div class="fhead">
+    <span class="cno">DEDUCTO</span>
+    <span class="ctitle">Standings</span>
+    <div class="meters"><div class="meter"><span class="k">Week</span><span class="v">32</span></div></div>
+  </div>
+  <div class="tabs">
+    <button aria-selected="true">Today</button>
+    <button aria-selected="false">Week</button>
+    <button aria-selected="false">All time</button>
+  </div>
+  <div class="body" style="display:block;overflow:auto">
+    <div style="padding:0 12px 12px">
+      <table class="rows">
+        <thead><tr><th style="width:38px">#</th><th>Detective</th><th style="width:56px;text-align:right">Time</th><th style="width:44px;text-align:right">Hints</th></tr></thead>
+        <tbody id="lb-rows"></tbody>
+      </table>
+    </div>
+  </div>
+  <div class="controls">
+    <span class="caps">Case 047 · 142 solved</span>
+    <span class="spacer"></span>
+    <button class="btn btn--secondary">Back to the case</button>
+  </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ LOADING ═══════════════════ -->
+<div class="screen" data-s="load" hidden>
+  <div class="centered">
+    <div class="card">
+      <div class="caps">Opening case file</div>
+      <div class="skel" style="width:62%;margin-top:16px"></div>
+      <div class="skel" style="width:88%"></div>
+      <div class="skel" style="width:74%"></div>
+      <div class="skel" style="width:40%"></div>
+      <div class="errcode">CASE 047 · FETCHING CLUES</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ ERROR ═══════════════════ -->
+<div class="screen" data-s="error" hidden>
+  <div class="centered">
+    <div class="card">
+      <span class="stamp red lg">File unavailable</span>
+      <p class="errbody" style="margin-top:18px">Today's case did not come back from the archive.
+        Your progress is stored on the server — nothing is lost.</p>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn--primary" style="flex:1">Try again</button>
+        <button class="btn btn--ghost">Standings</button>
+      </div>
+      <div class="errcode">CASE 047 · REQUEST FAILED (503)</div>
+    </div>
+  </div>
+</div>
+
+<div id="pchrome"></div>
+
+<script>
+/* ══════════════ prototype data (mirrors src/shared/themes.ts, case "pizza") ══════════════ */
+const SUS   = ["John", "Mira", "Paul", "Omar"];
+const COATS = [["R","c-R"],["B","c-B"],["G","c-G"],["P","c-P"]];
+const TIMES = ["09","12","15","18"];
+const ITEMS = ["🍕","⌨️","🥄","📜"];
+const CLUES = [
+  "John wasn't seen at 15:00.",
+  "The scroll was carried by the green coat.",
+  "Mira's coat isn't purple.",
+  "The spoon was carried by the blue coat.",
+  "Paul was seen before the one in the red coat.",
+  "Omar didn't carry the pizza.",
+  "The one seen at 09:00 wasn't wearing blue.",
+  "Paul's coat isn't purple.",
+  "The keyboard was carried before the spoon.",
+  "Mira was seen after John.",
+];
+/* eliminated[suspect][cat] = set of indices crossed out; kept = the single survivor */
+const EMPTY = () => SUS.map(() => [[], [], []]);
+const MID = [
+  [[1,2,3],[2],[0,3]],   /* John: coat deduced = Red   */
+  [[3],[0,3],[1]],
+  [[2,3],[1,2,3],[]],    /* Paul: time deduced = 09:00 */
+  [[0,1],[],[0,1,2]],    /* Omar: item deduced = scroll */
+];
+const SOLVED = [
+  [[1,2,3],[1,2,3],[1,2,3]],
+  [[0,2,3],[0,1,3],[0,1,2]],
+  [[0,1,3],[0,2,3],[0,1,2].map(x=>x===2?3:x)],
+  [[0,1,2],[0,1,2],[0,1,3]],
+];
+/* fix row 3/4 so exactly one survives per cell */
+SOLVED[2] = [[0,1,3],[0,2,3],[0,1,3]];
+SOLVED[3] = [[0,1,2],[0,1,2],[0,2,3]];
+
+const CAT = ["Coat","Time","Item"];
+
+function chipEl(cat, i, out, kept) {
+  const b = document.createElement("button");
+  b.className = "chip";
+  if (cat === 0) { b.classList.add(COATS[i][1]); b.textContent = COATS[i][0]; b.setAttribute("aria-label", ["Red","Blue","Green","Purple"][i] + " coat"); }
+  else if (cat === 1) { b.classList.add("t-"); b.textContent = TIMES[i]; b.setAttribute("aria-label", TIMES[i] + ":00"); }
+  else { b.classList.add("i-"); b.innerHTML = '<span class="g">' + ITEMS[i] + '</span>'; b.setAttribute("aria-label", ["Pizza","Keyboard","Spoon","Scroll"][i]); }
+  if (out) { b.classList.add("out"); b.setAttribute("aria-pressed", "true"); }
+  if (kept) b.classList.add("kept");
+  return b;
+}
+
+function cellEl(state, s, cat) {
+  const wrap = document.createElement("div");
+  wrap.className = "cellrow";
+  const gone = state[s][cat];
+  const alive = [0,1,2,3].filter(i => !gone.includes(i));
+  for (let i = 0; i < 4; i++) wrap.appendChild(chipEl(cat, i, gone.includes(i), alive.length === 1 && alive[0] === i));
+  return wrap;
+}
+
+function buildGrid(el, state) {
+  el.innerHTML = "";
+  const thead = document.createElement("thead");
+  const tr = document.createElement("tr");
+  tr.innerHTML = '<th class="corner"></th>' + CAT.map(c => "<th>" + c + "</th>").join("");
+  thead.appendChild(tr); el.appendChild(thead);
+  const tb = document.createElement("tbody");
+  SUS.forEach((name, s) => {
+    const row = document.createElement("tr");
+    const solvedRow = [0,1,2].every(c => state[s][c].length === 3);
+    if (solvedRow) row.className = "done";
+    const th = document.createElement("th");
+    th.className = "rowh"; th.scope = "row";
+    th.innerHTML = '<span class="mk"></span>' + name;
+    row.appendChild(th);
+    for (let c = 0; c < 3; c++) { const td = document.createElement("td"); td.className = "cell"; td.appendChild(cellEl(state, s, c)); row.appendChild(td); }
+    tb.appendChild(row);
+  });
+  el.appendChild(tb);
+}
+
+function buildNarrow(el, state) {
+  el.innerHTML = "";
+  const head = document.createElement("div");
+  head.className = "ncolh";
+  head.innerHTML = CAT.map(c => "<span>" + c + "</span>").join("");
+  el.appendChild(head);
+  SUS.forEach((name, s) => {
+    const box = document.createElement("div");
+    box.className = "nsus" + ([0,1,2].every(c => state[s][c].length === 3) ? " done" : "");
+    const nm = document.createElement("div");
+    nm.className = "nname"; nm.innerHTML = '<span class="mk"></span>' + name;
+    box.appendChild(nm);
+    const cats = document.createElement("div"); cats.className = "ncats";
+    for (let c = 0; c < 3; c++) { const d = document.createElement("div"); d.className = "ncat"; d.appendChild(cellEl(state, s, c)); cats.appendChild(d); }
+    box.appendChild(cats); el.appendChild(box);
+  });
+}
+
+function buildClues(el, statuses) {
+  el.innerHTML = "";
+  CLUES.forEach((t, i) => {
+    const st = statuses[i] || "";
+    const row = document.createElement("div");
+    row.className = "clue" + (st === "ok" ? " clue--ok" : st === "bad" ? " clue--bad" : "");
+    row.innerHTML = '<span class="n">' + (i + 1) + '</span><span class="t">' + t +
+      '<span class="flag">Contradicted by the board</span></span>';
+    el.appendChild(row);
+  });
+}
+
+function ticks(el, n) { el.innerHTML = ""; for (let i = 0; i < 12; i++) { const t = document.createElement("i"); if (i < n) t.className = "on"; el.appendChild(t); } }
+
+/* histogram (mock, same buckets as src/client/main.ts) */
+const BINS = [9,24,38,31,20,12,6,2], LBL = ["<2","2-3","3-4","4-5","5-7","7-10","10-15","15+"], YOU = 3;
+function buildHist(h, x) {
+  const max = Math.max(...BINS); h.innerHTML = ""; x.innerHTML = "";
+  BINS.forEach((v, i) => {
+    const bin = document.createElement("div"); bin.className = "bin" + (i === YOU ? " you" : "");
+    const bar = document.createElement("div"); bar.className = "bar"; bar.style.height = Math.max(4, Math.round(v / max * 70)) + "px";
+    bin.appendChild(bar); h.appendChild(bin);
+    const s = document.createElement("span"); if (i === YOU) s.className = "you";
+    s.innerHTML = LBL[i] + (i === YOU ? "<em>YOU</em>" : "");
+    x.appendChild(s);
+  });
+}
+
+const LB = [
+  ["1","u/quillfox","02:38","0"], ["2","u/mimi_deduces","03:11","0"], ["3","u/harbor_light","04:02","1"],
+  ["4","u/tenpenny","04:09","0"], ["5","u/gaslamp","04:14","2"], ["6","u/orrery","04:22","0"],
+  ["7","u/n_and_void","04:26","1"], ["17","u/you","04:31","1", true], ["18","u/pellucid","04:35","0"],
+];
+function buildLB(el) {
+  el.innerHTML = "";
+  LB.forEach(r => {
+    const tr = document.createElement("tr"); if (r[4]) tr.className = "you";
+    tr.innerHTML = '<td class="n">' + r[0] + '</td><td class="name">' + r[1] +
+      (r[4] ? '<span class="youtag">You</span>' : '') + '</td><td class="n">' + r[2] + '</td><td class="n">' + r[3] + '</td>';
+    el.appendChild(tr);
+  });
+}
+
+/* ══════════════ state router ══════════════ */
+const STATES = {
+  "splash":        { screen: "splash" },
+  "game-empty":    { screen: "game", board: EMPTY(), clues: [], prog: 0, time: "00:00", tally: "10 OPEN", action: "Reveal a cell" },
+  "game-mid":      { screen: "game", board: MID, clues: {0:"ok",2:"ok",6:"ok",9:"ok"}, prog: 3, time: "02:14", tally: "4 SATISFIED · 6 OPEN", action: "Reveal a cell" },
+  "game-violated": { screen: "game", board: MID, clues: {0:"ok",2:"ok",3:"bad",6:"ok",9:"ok"}, prog: 3, time: "03:02", tally: "<b>1 CONTRADICTED</b> · 4 SATISFIED", action: "Reveal a cell" },
+  "game-solved":   { screen: "game", board: SOLVED, clues: Object.fromEntries(CLUES.map((_, i) => [i, "ok"])), prog: 12, time: "04:31", tally: "10 SATISFIED", action: "See results" },
+  "result":        { screen: "result" },
+  "board":         { screen: "board" },
+  "load":          { screen: "load" },
+  "error":         { screen: "error" },
+};
+
+function apply() {
+  const p = new URLSearchParams((location.hash || "").replace(/^#/, "") || location.search.replace(/^\?/, ""));
+  const s = p.get("s") || "splash";
+  const t = p.get("t");
+  if (t === "dark" || t === "light") document.documentElement.setAttribute("data-theme", t);
+  else document.documentElement.removeAttribute("data-theme");
+  document.body.classList.toggle("shot", p.get("shot") === "1");
+
+  const cfg = STATES[s] || STATES.splash;
+  document.querySelectorAll(".screen").forEach(el => { el.hidden = el.dataset.s !== cfg.screen; });
+
+  if (cfg.screen === "game") {
+    buildGrid(document.getElementById("g-grid"), cfg.board);
+    buildNarrow(document.getElementById("g-nboard"), cfg.board);
+    buildClues(document.getElementById("g-clues"), cfg.clues);
+    ticks(document.getElementById("g-ticks"), cfg.prog);
+    document.getElementById("g-prog").textContent = String(cfg.prog).padStart(2, "0") + "/12";
+    document.getElementById("g-time").textContent = cfg.time;
+    document.getElementById("g-tally").innerHTML = cfg.tally;
+    document.getElementById("g-action").textContent = cfg.action;
+    document.getElementById("g-action").className = "btn " + (cfg.prog === 12 ? "btn--primary" : "btn--secondary");
+    document.getElementById("g-slip").innerHTML = s === "game-mid"
+      ? '<div class="slip"><div class="caps">Hint 1 of 1 · revealed</div><div class="txt">Mira · Time <b class="num">15:00</b></div></div>' : "";
+  }
+  if (cfg.screen === "result") {
+    buildGrid(document.getElementById("r-grid"), SOLVED);
+    buildNarrow(document.getElementById("r-nboard"), SOLVED);
+    buildClues(document.getElementById("r-clues"), Object.fromEntries(CLUES.map((_, i) => [i, "ok"])));
+    ticks(document.getElementById("r-ticks"), 12);
+    buildHist(document.getElementById("r-hist"), document.getElementById("r-histx"));
+  }
+  if (cfg.screen === "board") buildLB(document.getElementById("lb-rows"));
+
+  // prototype nav
+  const nav = document.getElementById("pchrome");
+  nav.innerHTML = Object.keys(STATES).map(k =>
+    '<a class="' + (k === s ? "on" : "") + '" href="#s=' + k + (t ? "&t=" + t : "") + '">' + k + "</a>").join("") +
+    '<a href="#s=' + s + '&t=light" class="' + (t === "light" ? "on" : "") + '">☀ light</a>' +
+    '<a href="#s=' + s + '&t=dark" class="' + (t === "dark" ? "on" : "") + '">☾ dark</a>' +
+    '<a href="#s=' + s + '">auto</a>';
+}
+addEventListener("hashchange", apply);
+apply();
+</script>
+</body>
+</html>
