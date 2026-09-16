@@ -1,0 +1,1086 @@
+/* The board, opened fullscreen through the "game" entrypoint (requestExpandedMode).
+   Layout rules that are not negotiable:
+     - nothing scrolls (base.css pins html/body to overflow:hidden);
+     - every screen fits 375x667 through 1440x900;
+     - one DOM for every width - the phone/desktop difference is CSS, not a second renderer.
+   Colours/sizes come from tokens.css only.
+
+   D3 "Manila": the app is a case file - warm paper, ink, hairlines, stamps. The only hues on
+   screen are the four coats in the evidence grid and one archive red, used once per screen.
+   Everything else - progress, time, buttons, headings, the board frame, the histogram, the
+   leaderboard - is achromatic by construction. */
+@import "./base.css";
+@import "./ledger.css";
+
+body { display: block; }
+/* One screen at a time. Everything is off by default so adding a view can never leave two on. */
+#view-game, #view-result, #view-guest, #view-load, #view-error, #view-standings,
+#view-me { display: none; }
+body[data-view="game"] #view-game,
+body[data-view="result"] #view-result,
+body[data-view="guest"] #view-guest,
+body[data-view="load"] #view-load,
+body[data-view="standings"] #view-standings,
+body[data-view="me"] #view-me,
+body[data-view="error"] #view-error { display: flex; }
+
+/* ========================= loading / error (spec 4.11) ========================= */
+.centered {
+  height: 100%; width: 100%;
+  display: flex; align-items: center; justify-content: center;
+  padding: var(--sp-4);
+}
+.centered .card {
+  width: 100%; max-width: 460px;
+  background: var(--sheet);
+  border: 1px solid var(--rule-strong);
+  box-shadow: var(--shadow-1);
+  padding: var(--sp-5) var(--sp-4);
+}
+.skel { height: 10px; background: var(--groove); border: 1px solid var(--rule); margin-top: 10px; }
+.errbody { font-size: var(--fs-sm); color: var(--ink-2); line-height: 1.5; margin: var(--sp-4) 0; }
+.errcode {
+  margin-top: var(--sp-3);
+  font: 600 var(--fs-2xs)/1.4 var(--font-mono);
+  letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3);
+}
+.centered .btn { width: 100%; }
+
+/* ========================= game view ========================= */
+/* the case file itself: full-bleed on a phone, a sheet on the desk on a large screen */
+.app {
+  height: 100%;
+  width: 100%;
+  max-width: 1040px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  background: var(--sheet);
+}
+
+/* ---- casebar: the file header ---- */
+.casebar {
+  flex: 0 0 auto;
+  display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--sheet);
+  border-bottom: 1px solid var(--rule-strong);
+}
+/* the case number is INK here and red only on the splash: on the splash the identity is the
+   message, in the game the state is - and red belongs to the clue panel alone */
+.case-no {
+  font: 700 var(--fs-2xs)/1 var(--font-mono);
+  letter-spacing: var(--ls-caps); text-transform: uppercase;
+  color: var(--ink-2); white-space: nowrap;
+}
+/* serif use 1 of 2 in the whole system: the case title */
+.case-title {
+  font: 600 var(--fs-md)/1.2 var(--font-serif);
+  letter-spacing: -.01em;
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* the tier stamp is two lines now (dec. 77); in the casebar it gives back the padding so the
+   header costs the board no more height than the one-line rung did */
+.casebar .stamp.tier { flex: 0 0 auto; padding: 2px 5px; }
+.hud { display: flex; align-items: center; gap: var(--sp-3); margin-left: auto; }
+.meter { display: flex; align-items: center; gap: var(--sp-2); }
+.meter-v {
+  font: 700 var(--fs-xs)/1 var(--font-mono);
+  font-variant-numeric: tabular-nums; color: var(--ink);
+}
+.meter[hidden] { display: none; }
+/* The world boundary, in the one place the HUD needs one: the two meters before it are this case's
+   progress and this case's clock, and the one after it is the run you are protecting across every
+   case you have ever played (docs/11-stats-ia.md §4.2). A rule rather than a label, for the same
+   reason as on the docket - the strip shares a 30px bar with the case number, the title and the
+   tier stamp, and a word would cost more than it explains. */
+.meter.wbreak {
+  padding-left: var(--sp-3);
+  border-left: 1px solid var(--rule-strong);
+}
+
+/* ---- yesterday's epilogue (dec. 40) ---- */
+.epilogue {
+  flex: 0 0 auto;
+  display: flex; align-items: baseline; gap: var(--sp-2);
+  padding: 3px var(--sp-3);
+  border-bottom: 1px solid var(--rule);
+  font-size: var(--fs-2xs); line-height: 1.5; color: var(--ink-3);
+  white-space: nowrap; overflow: hidden;
+}
+.epilogue:empty { display: none; }
+.epilogue .etxt { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.epilogue b { color: var(--ink-2); font-weight: 700; font-family: var(--font-mono); }
+
+/* ---- main split: clues + board ---- */
+.main {
+  flex: 1 1 auto; min-height: 0;
+  display: flex; flex-direction: column;
+  background: var(--sheet);
+}
+/* ── the clue panel may never paint outside itself (track 12) ────────────────────────────────
+   The owner opened a 12-clue case on an iPhone and clue 12 was cut in half by the board's
+   COAT/TIME/ITEM header printing over it. The mechanism is structural, not cosmetic: this is a
+   flex item with the default `flex-shrink: 1`, so when the column is short it is squeezed BELOW
+   its content height - and with `html`/`body` pinned to `overflow: hidden` a box that does not fit
+   neither scrolls nor clips. It paints through whatever is beneath it, in silence.
+
+   Every previous answer to this was a pixel budget: shave the padding, drop the line-height, add a
+   density step. Those were all measured in a font no player has (see plans/assets/proto/12-fonts),
+   so each one was fitted to the wrong number and the next font knocked it over. `overflow: hidden`
+   here is the guarantee that does not depend on any metric: whatever the font does, the clue list
+   cannot reach the board. The list itself scrolls (below), so nothing is lost to the clip - which
+   is what makes this safe to do, because a clue you cannot read is a case you cannot solve. */
+.clue-panel {
+  display: flex; flex-direction: column; min-height: 0; min-width: 0;
+  overflow: hidden;
+  border-bottom: 1px solid var(--rule-strong);
+}
+/* `position: relative` because the hint slip floats inside this box and nowhere else: the clue
+   column must not move when a hint opens (dec. 78). */
+.grid-area {
+  position: relative;
+  flex: 1 1 auto; min-height: 0; min-width: 0;
+  display: flex; flex-direction: column; justify-content: center; gap: var(--sp-2);
+  padding: var(--sp-2) 6px;
+  overflow: hidden;
+}
+
+/* ---- clue list: ruled rows, status by shape first ---- */
+.cluehead {
+  flex: 0 0 auto;
+  display: flex; align-items: baseline; gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3) var(--sp-1);
+  background: var(--groove);
+  /* the head of a panel is structure, not decoration: --rule left it floating on the list */
+  border-bottom: 1px solid var(--rule-strong);
+}
+.tally {
+  margin-left: auto;
+  font: 700 var(--fs-2xs)/1 var(--font-mono);
+  letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3);
+  white-space: nowrap;
+}
+/* the contradiction count is the same one red as the clue row it points at */
+.tally b { color: var(--stamp); font-weight: 700; }
+
+/* The list scrolls inside its own box, and only when the density ladder above has already failed
+   to make the clues fit - which on the shipped bank means a 12-clue case on a short phone. The
+   design's "nothing scrolls" rule (base.css) keeps its one existing exception, the standings list,
+   and gains a second for the same reason: a bounded scroller is the only alternative to losing
+   content, and losing a clue loses the case. The ladder is still what makes this rare; the
+   scroller is what makes it safe when the ladder runs out. */
+.clue-list {
+  flex: 1 1 auto; min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0 var(--sp-5);
+  align-content: start;
+  overflow-y: auto; overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+/* Two columns are read DOWN each one, not across the pair (dec. 87). The band is 540-899px and
+   nothing else: below 540 the panel is one column, from 900 it becomes a 250-330px sidebar and is
+   one column again - so the whole of this decision is invisible outside it, which is why it is
+   written as an explicit band rather than left to `auto-fit`. 540px is exactly where `auto-fit,
+   minmax(260px, 1fr)` used to break to two columns, so the breakpoint does not move.
+
+   `grid-auto-flow: column` over an explicit row count is what turns 1,2 / 3,4 / 5,6 into 1-6 then
+   7-11. The count comes from renderClues() as `--clue-rows` = ceil(clues / 2): with the rows made
+   explicit there can never be an implicit third column, which is the one way a multicol-style
+   layout can push clues sideways out of a box that clips. */
+@media (min-width: 540px) and (max-width: 899px) {
+  .clue-list {
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: repeat(var(--clue-rows, 1), auto);
+    grid-auto-flow: column;
+  }
+}
+.clue-item {
+  display: flex; gap: var(--sp-2); align-items: flex-start;
+  padding: 7px var(--sp-3) 7px 9px;
+  border-left: 3px solid transparent;
+  border-bottom: 1px solid var(--rule);
+  font-size: var(--fs-sm); line-height: 1.4; color: var(--ink-2);
+}
+.clue-item .num {
+  flex: 0 0 auto; width: 17px; height: 17px; margin-top: 1px;
+  border: 1px solid var(--rule-strong); border-radius: var(--r-1);
+  font: 700 10px/15px var(--font-mono); text-align: center;
+  color: var(--ink-3); font-variant-numeric: tabular-nums;
+}
+/* satisfied clues RECEDE - struck through, muted, the number box filled in ink */
+.clue-item.st-ok { color: var(--ink-3); }
+.clue-item.st-ok .txt { text-decoration: line-through; text-decoration-thickness: 1px; }
+.clue-item.st-ok .num { background: var(--ink-3); border-color: var(--ink-3); color: var(--sheet); }
+/* the contradicted clue is the only one at full ink strength - and the screen's one red */
+.clue-item.st-bad { color: var(--ink); background: var(--stamp-wash); border-left-color: var(--stamp); }
+.clue-item.st-bad .num { background: var(--stamp); border-color: var(--stamp); color: var(--stamp-ink); }
+.clue-item .flag { display: none; }
+.clue-item.st-bad .flag {
+  display: block; margin-top: 3px;
+  font: 700 9px/1 var(--font-mono); letter-spacing: var(--ls-caps); text-transform: uppercase;
+  color: var(--stamp);
+}
+.loading { padding: var(--sp-5); text-align: center; color: var(--ink-3); font-size: var(--fs-sm); }
+
+/* ---- hint slip: a slip of paper laid ON the board, no hue (spec 4.7) ----
+   Dec. 66 put it in flow under the clue column so a hint could not cover the board it talks
+   about. That traded one silent failure for another: in flow it comes out of the clue list's
+   height budget, and on a 14-clue case it ate a clue row at every phone size (measured, +80px
+   over at 375x667). Dec. 78 reverses it. The slip is absolutely positioned inside `.grid-area`,
+   so opening it moves NOTHING - not a clue row, not the epilogue, not the board - and the
+   `data-anchor` flip keeps it at the far end of the board from the cell it is naming.
+   The dismiss ✕ stays on the head rail beside the label (dec. 73). */
+.notice {
+  display: none;
+  position: absolute; left: 0; right: 0; z-index: 5;
+  border: 1px solid var(--rule-strong); border-left: 3px solid var(--ink-3);
+  background: var(--sheet-raised);
+  box-shadow: var(--shadow-1);
+}
+.notice[data-anchor="bottom"] { bottom: 0; }
+.notice[data-anchor="top"] { top: 0; }
+.notice.show { display: block; animation: slipin .2s ease-out; }
+@keyframes slipin { from { opacity: 0; transform: translateY(-3px); } }
+
+.notice-head {
+  display: flex; align-items: center; gap: var(--sp-2);
+  min-height: 24px; padding: 2px var(--sp-1) 2px var(--sp-3);
+  background: var(--groove);
+  border-bottom: 1px solid var(--rule-strong);
+}
+.notice-tools { display: flex; align-items: center; gap: var(--sp-2); margin-left: auto; }
+.notice-tools:empty { display: none; }
+/* not a `.btn`: a 24px glyph on the rail, the same weight as the caps label beside it */
+.notice-x {
+  flex: 0 0 auto; margin-left: auto;
+  display: flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; border-radius: var(--r-1);
+  color: var(--ink-3);
+}
+/* :not(:empty) matters - an empty tools span is display:none but still an adjacent sibling,
+   and without the guard the ✕ walks left and sits against the label */
+.notice-tools:not(:empty) + .notice-x { margin-left: 0; }
+.notice-body { padding: var(--sp-2) var(--sp-3); }
+#notice-text { font-size: var(--fs-sm); color: var(--ink); }
+
+.hint-pager { display: flex; gap: var(--sp-1); }
+.hint-pager button {
+  border: 1px solid var(--rule-strong); border-radius: var(--r-1);
+  color: var(--ink); padding: 0 6px;
+  font: 700 var(--fs-sm)/1.2 var(--font-mono);
+}
+.hint-pager button:disabled { color: var(--ink-3); border-color: var(--rule); cursor: default; }
+.hint-body { display: flex; align-items: center; gap: var(--sp-3); }
+.hint-line { flex: 1; min-width: 0; font-size: var(--fs-sm); line-height: 1.45; color: var(--ink); }
+.hint-reveal {
+  flex: 0 0 auto;
+  border: 1px solid var(--rule-strong); border-radius: var(--r-1); color: var(--ink);
+  padding: 4px var(--sp-2);
+  font: 600 var(--fs-xs)/1.2 var(--font-sans); white-space: nowrap;
+}
+.hint-reveal:disabled { color: var(--ink-3); border-color: var(--rule); cursor: default; }
+.hint-free {
+  font: 700 9px/1 var(--font-mono); letter-spacing: var(--ls-caps); text-transform: uppercase;
+  color: var(--ink-3);
+}
+/* The rail is --groove and the body is --sheet-raised, so a hover that only swaps a
+   background is invisible in one of the two. Border + label carry it in both. */
+@media (hover: hover) {
+  .notice-x:hover { background: var(--sheet-raised); color: var(--ink); }
+  .hint-pager button:hover:not(:disabled) { background: var(--sheet-raised); border-color: var(--ink); }
+  .hint-reveal:hover:not(:disabled) { background: var(--groove); border-color: var(--ink); }
+}
+
+/* ---- hint ladder: two free rungs that teach, one paid rung that answers (dec. 53).
+   The price rides ON the button - an unlabelled free hint is a hint nobody presses. ---- */
+.hint-ladder { display: flex; gap: var(--sp-1); margin-top: var(--sp-2); }
+.hint-step {
+  flex: 1 1 0; min-width: 0; min-height: 38px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  border: 1px solid var(--rule-strong); border-radius: var(--r-1);
+  padding: 4px var(--sp-1);
+  color: var(--ink); font: 600 var(--fs-2xs)/1.2 var(--font-sans); text-align: center;
+}
+.hint-step:disabled { color: var(--ink-3); border-color: var(--rule); cursor: default; }
+@media (hover: hover) {
+  .hint-step:hover:not(:disabled) { background: var(--groove); border-color: var(--ink); }
+}
+.hint-step .cost {
+  font: 700 9px/1 var(--font-mono); letter-spacing: var(--ls-caps); text-transform: uppercase;
+  color: var(--ink-3);
+}
+/* "costs 1" is the one rung that spends something: weight and full ink, never a hue */
+.hint-step .cost.pay { color: var(--ink); }
+.hint-step:disabled .cost { color: var(--ink-3); }
+/* ---- the three answered states (dec. 88) ----
+   A press has to change something visible, always. `on` is the rung whose sentence is currently
+   in the slip: recessed and ink-bounded, i.e. selected, not spent - it is disabled because
+   pressing it again could only reprint what you are reading. `spent` is a rung that came back
+   empty on this board, drawn as the system draws anything with nothing behind it. Both revert the
+   moment a chip moves, because the board is the key the answers are filed under. */
+.hint-step[data-state="on"] {
+  background: var(--groove); border-color: var(--ink); color: var(--ink);
+}
+.hint-step[data-state="on"] .cost { color: var(--ink-2); }
+.hint-step[data-state="spent"] { border-style: dashed; }
+.hint-step[data-state="busy"] .cost { color: var(--ink-2); }
+
+/* ---- board: a ruled form. Cells bounded by --rule, heads recessed into --groove. ----
+   One renderer for every width: the suspect name stacks above its cells on a phone and sits
+   beside them from 720px. On phones the four suspect rows split whatever height the clue list
+   leaves, so a 15-clue case shrinks the chips instead of pushing the board off-screen. */
+.board {
+  flex: 0 1 auto; min-height: 0;
+  display: flex; flex-direction: column;
+  width: 100%;
+}
+.bhead, .brow { display: grid; grid-template-columns: repeat(3, 1fr); min-height: 0; }
+.bhead { flex: 0 0 auto; }
+.brow { flex: 0 1 auto; grid-template-rows: auto minmax(0, 1fr); }
+.bhead > span {
+  font: 700 var(--fs-2xs)/1 var(--font-mono);
+  letter-spacing: var(--ls-caps); text-transform: uppercase;
+  color: var(--ink-3); text-align: center; padding: 5px 0;
+}
+.bhead .corner { display: none; }
+.bname {
+  grid-column: 1 / -1;
+  display: flex; align-items: center; gap: 7px;
+  padding: 3px var(--sp-2);
+  background: var(--groove);
+  font: 600 var(--fs-sm)/1.4 var(--font-sans); color: var(--ink);
+  overflow: hidden; white-space: nowrap;
+}
+/* hollow box while the suspect is open, filled ink once all three cells are deduced.
+   This is the whole "row solved" signal - no green frame, no flash, no tick glyph. An 8px box
+   with a 1px rule was the same weight as every other hairline on the board (dec. 76): it is
+   10px with a 1.5px rule now, and the closed row carries two more free channels - the name goes
+   to 700 and the name strip takes an inset ink bar, the same mark the ledger uses for "this row
+   is you". Three non-colour channels for one fact. */
+.bname .done-mark {
+  flex: 0 0 auto; width: 10px; height: 10px;
+  border: 1.5px solid var(--rule-strong); background: none;
+}
+.bname .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.brow.done .bname .done-mark { background: var(--ink); border-color: var(--ink); animation: pop .3s; }
+.brow.done .bname { box-shadow: inset 3px 0 0 var(--ink); }
+.brow.done .bname .nm { font-weight: 700; }
+@keyframes pop { 50% { transform: scale(1.5); } }
+.bcell {
+  display: flex; gap: 3px;
+  align-items: center; justify-content: center;
+  padding: 4px 3px;
+  min-width: 0; min-height: 0;
+}
+/* narrow: each suspect is a boxed block, blocks share edges.
+   The form is ruled in --rule-strong, which is what the spec asked for all along
+   (§1.3: "structure + every control boundary: chips, secondary buttons, table head,
+   board grid"). Drawn in --rule it was a 1.48:1 hairline - a grid you had to take on
+   faith - and it is the single biggest reason the board read as a field of loose chips. */
+.brow { border: 1px solid var(--rule-strong); border-bottom: 0; }
+.brow:last-child { border-bottom: 1px solid var(--rule-strong); }
+.bcell + .bcell { border-left: 1px solid var(--rule-strong); }
+.bname { border-bottom: 1px solid var(--rule); }
+
+/* ---- candidate chip: the evidence layer, and the only colour in the interface ---- */
+.chip-m {
+  position: relative;
+  flex: 0 1 var(--chip); max-width: var(--chip); aspect-ratio: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 0;
+  border: 1px solid var(--rule-strong); border-radius: var(--r-1);
+  background: var(--sheet); color: var(--ink);
+  font: 800 var(--fs-sm)/1 var(--font-mono);
+  user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+  touch-action: manipulation; cursor: pointer;
+  transition: background .1s, border-color .1s;
+}
+/* lift the touch target toward 44px without growing the visual grid (spec 4.4) */
+.chip-m::before { content: ""; position: absolute; inset: -6px -3px; }
+.chip-m .g { pointer-events: none; }
+.chip-m.k-time { font-size: var(--fs-xs); letter-spacing: -.02em; }
+.chip-m.k-object { font-size: var(--fs-md); }
+.chip-m.fl-Red { background: var(--coat-r); color: var(--coat-r-ink); border-color: var(--coat-r); }
+.chip-m.fl-Blue { background: var(--coat-b); color: var(--coat-b-ink); border-color: var(--coat-b); }
+.chip-m.fl-Green { background: var(--coat-g); color: var(--coat-g-ink); border-color: var(--coat-g); }
+.chip-m.fl-Purple { background: var(--coat-p); color: var(--coat-p-ink); border-color: var(--coat-p); }
+/* ruled out = a pen stroke: the hue drops to a wash so you can still see WHAT was crossed out,
+   the letter stays, and the line crosses it. The lightness jump is the CVD-proof channel. */
+.chip-m.crossed {
+  background: var(--groove); border-color: var(--rule-strong); color: var(--ink-3); font-weight: 600;
+}
+.chip-m.fl-Red.crossed { background: var(--coat-r-out); color: var(--ink); }
+.chip-m.fl-Blue.crossed { background: var(--coat-b-out); color: var(--ink); }
+.chip-m.fl-Green.crossed { background: var(--coat-g-out); color: var(--ink); }
+.chip-m.fl-Purple.crossed { background: var(--coat-p-out); color: var(--ink); }
+.chip-m.k-object.crossed .g { opacity: .55; }
+.chip-m.crossed::after {
+  content: ""; position: absolute; left: -1px; right: -1px; top: 50%; height: 2px;
+  background: var(--strike); transform: translateY(-50%) rotate(-38deg);
+}
+/* ---- deduced (sole survivor) = circled in pen ----
+   This is the single most important thing the board ever says - "this chip is the answer" - and
+   the first cut said it with `outline: 2px --ink; outline-offset: 2px`, which failed for a reason
+   arithmetic could have predicted (dec. 76). A phone chip is 26-28px with a 3px gap to its
+   neighbour, so a ring drawn 2px OUTSIDE the chip lands in that gap and touches the neighbouring
+   chip's own 1px border: on a board where every chip and every cell is already bounded by a line,
+   two more merged hairlines are not a channel. It was worst on the mid-luminance coats (G, P),
+   where a thin dark line has no fill mass behind it to read against.
+
+   There is no room outside, so the mark goes inside, where the chip owns every pixel: a solid
+   INK FRAME 4px thick (1px border + 2px inset ring + 1px hugging the outside edge). That is
+   four times the mass of any other line on the board, it is pure --ink on every coat and on
+   paper alike, and it costs 3px of glyph box rather than 4px of grid. Achromatic by construction,
+   so it survives greyscale and every CVD type - and it no longer collides with :focus-visible,
+   which owns `outline` and now has it to itself. */
+.chip-m.confirmed {
+  border-color: var(--ink);
+  box-shadow: inset 0 0 0 2px var(--ink), 0 0 0 1px var(--ink);
+}
+/* The frame eats 3px of glyph box on each side; on a 26px chip the two-digit hour is the only
+   glyph that then wants more room than it has. */
+@media (max-width: 719px) { .chip-m.k-time.confirmed { letter-spacing: -.05em; } }
+
+/* The board is the one thing on this screen you are meant to touch, and until now it was the
+   one thing with no pointer feedback at all: a <span> with a click listener, default cursor,
+   no :hover (dec. 73). The chip is a <button> now, so it also focuses and answers to Enter.
+   Hover is the pen coming down on it - the border goes to ink, in every state and on every
+   coat, which is the one channel that reads on a saturated fill as well as on paper. */
+@media (hover: hover) {
+  .board:not([data-locked]) .chip-m:hover { border-color: var(--ink); }
+}
+.board[data-locked] .chip-m { cursor: default; }
+
+/* ---- the standing instruction under the board ----
+   It is a caption, not a message, and until now it did not look like one: 11px mono caps is the
+   same dress every notice, tally and stamp in the app wears, so the one line that is ALWAYS true
+   read as one more thing the game was telling you (dec. 79). Sentence-case sans in --ink-3 is
+   what a caption looks like; caps are kept for labels, which this is not. It still carries the
+   board's one piece of state - "a clue contradicts you" - because that is the board describing
+   itself, and that variant goes to full ink so the difference is legible. */
+.boardhelp {
+  flex: 0 0 auto; text-align: center;
+  font: 400 var(--fs-xs)/1.5 var(--font-sans);
+  color: var(--ink-3);
+}
+.boardhelp:empty { display: none; }
+.boardhelp.alert { color: var(--ink); }
+.boardhelp b { color: var(--ink); font-weight: 700; }
+
+/* ---- controls: a recessed strip along the bottom edge ---- */
+.controls {
+  flex: 0 0 auto;
+  display: flex; align-items: center; gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3) calc(var(--sp-2) + env(safe-area-inset-bottom));
+  background: var(--groove);
+  border-top: 1px solid var(--rule-strong);
+}
+.controls .spacer { flex: 1; }
+.controls .btn { white-space: nowrap; }
+/* One row, four glyph buttons of one size on the left and named buttons of one size on the right.
+   `.lane` used to carry its own type scale and padding, so Warm-up and Hint - side by side, doing
+   the same kind of thing - were two different sizes; the icon rail had the same defect with the
+   standings label. The metrics belong to the ROW, not to whichever button was last adjusted. */
+.controls .btn.secondary, .controls .btn.primary { font-size: var(--fs-sm); padding: 0 var(--sp-3); }
+/* On a replayed solve both Hint and Results are up; main.ts drops the warm-up lane in that
+   state rather than letting three labels fight for a 360px row - a solved case has nothing
+   to warm up for, and the lane comes back the moment you leave the result. */
+.btn.lane[hidden] { display: none; }
+/* The icon rail gained a fourth entrance (standings). At 360px that is 20px more than the bar
+   has, and the bar is the one strip that cannot wrap - measured at 360x800, where the document
+   went 380px wide and "Hints (1)" left the screen. Icons give the width back, not the labels. */
+@media (max-width: 400px) {
+  .btn.lane { padding: 0 var(--sp-2); font-size: var(--fs-xs); }
+  .controls { gap: var(--sp-1); }
+  .controls .btn.icon { min-width: 40px; }
+}
+
+/* ========================= from 720px: the ruled table ========================= */
+@media (min-width: 720px) {
+  body[data-view="game"] { display: flex; align-items: center; justify-content: center; padding: var(--sp-5) var(--sp-4); }
+  /* from here the app is a sheet lying on the desk: 2:1 of lightness under it, a structural
+     rule around it and a printed drop under that. On a phone it is full-bleed and gets none
+     of the three, because there is no desk to lie on. */
+  .app { height: auto; max-height: 100%; border: 1px solid var(--rule-strong); box-shadow: var(--shadow-1); }
+  .grid-area { padding: var(--sp-3); }
+  .board {
+    max-width: 760px; margin: 0 auto;
+    border-top: 1px solid var(--rule-strong); border-left: 1px solid var(--rule-strong);
+  }
+  .bhead, .brow { grid-template-columns: minmax(84px, 15%) repeat(3, 1fr); }
+  .brow { grid-template-rows: minmax(0, 1fr); border: 0; }
+  .brow:last-child { border: 0; }
+  .bhead .corner { display: block; }
+  .bhead > span { background: var(--groove); }
+  .bname {
+    grid-column: auto; border-bottom: 1px solid var(--rule-strong);
+    padding: 0 var(--sp-2); font-size: var(--fs-sm);
+  }
+  .bhead > span, .bname, .bcell {
+    border-right: 1px solid var(--rule-strong); border-bottom: 1px solid var(--rule-strong);
+  }
+  .bcell { padding: 5px; gap: 4px; }
+  .bcell + .bcell { border-left: 0; }
+}
+
+/* From 900px the clue list moves into a side column and the board stops fighting for height. */
+@media (min-width: 900px) {
+  .main { flex-direction: row; }
+  .clue-panel {
+    width: clamp(250px, 30%, 330px); flex: 0 0 auto;
+    border-bottom: 0; border-right: 1px solid var(--rule-strong);
+  }
+  .clue-list { gap: 0; }
+  .controls .btn { max-width: 260px; }
+}
+
+/* ========================= result view ========================= */
+/* A screen of its own (dec. 48), painted as the raised sheet the spec asks for: same palette,
+   same paper, one step up the elevation ladder. No scrim over a live board - that variant
+   scrolls at 375x667 once the vote block is in, and the Featuring gate forbids it. */
+.result {
+  height: 100%; width: 100%;
+  display: flex; align-items: center; justify-content: center;
+  padding: var(--sp-3);
+}
+.rsheet {
+  position: relative;
+  width: 100%; max-width: 620px; max-height: 100%;
+  /* hero + facts are one group ("what you scored") and sit 8px apart; the sections below are
+     other groups and get 20px. Two distances, not three near-identical ones. */
+  display: flex; flex-direction: column; gap: var(--sp-2);
+  background: var(--sheet-raised);
+  border: 1px solid var(--rule-strong);
+  box-shadow: var(--shadow-1);
+  padding: var(--sp-4);
+  animation: rise .35s ease-out;
+}
+@keyframes rise { from { opacity: 0; transform: translateY(12px); } }
+.closestamp { position: absolute; top: 10px; right: var(--sp-4); }
+.r-back { position: absolute; top: 4px; left: 4px; min-height: 32px; min-width: 32px; color: var(--ink-3); }
+
+.hero {
+  flex: 0 0 auto; text-align: center;
+  padding: var(--sp-2) 0 var(--sp-3);
+  border-bottom: 1px solid var(--rule);
+}
+/* the kicker shares its line with the corner stamp - keep it out from under it at every width */
+.hero .caps { padding: 0 var(--sp-6); }
+.hero-time {
+  font: 700 var(--fs-2xl)/1 var(--font-mono); font-variant-numeric: tabular-nums;
+  margin: 6px 0 2px;
+}
+/* `Your best` - the one moment a lifetime figure can be delivered as news (docs/11 §7). It is the
+   ledger's filled `You` tag, raised off the 34px baseline it hangs from, and it is INK: the sheet's
+   one red mark is the CLOSED stamp, and a personal record does not get to compete with it. */
+.hero-time .tag.pb { vertical-align: middle; margin-left: var(--sp-2); }
+/* serif use 2 of 2 in the whole system: the result hero subtitle */
+.hero-sub { font: 400 var(--fs-md)/1.3 var(--font-serif); color: var(--ink-2); }
+
+.facts { flex: 0 0 auto; display: flex; flex-wrap: wrap; border: 1px solid var(--rule-strong); }
+.facts:empty { display: none; }
+.fact { flex: 1 1 33%; min-width: 92px; padding: var(--sp-2) var(--sp-3); }
+.fact + .fact { border-left: 1px solid var(--rule); }
+.fact .k {
+  font: 700 9px/1 var(--font-mono); letter-spacing: var(--ls-caps); text-transform: uppercase;
+  color: var(--ink-3);
+}
+.fact .v { font: 700 var(--fs-md)/1.2 var(--font-mono); font-variant-numeric: tabular-nums; margin-top: 3px; }
+.fact .v.sm { font: 600 var(--fs-sm)/1.3 var(--font-sans); }
+/* ---- the rank ladder (dec. 89) ----
+   It shares the facts strip's box - one ruled block, "what you scored", which is the group
+   dec. 80 drew - and continues its top border rather than starting a second one.
+
+   Three non-colour channels carry position, so the ladder survives greyscale, CVD and a font
+   stack with no emoji at all: the rung you hold is framed in ink (the same inset frame the
+   deduced chip uses, dec. 76), the rail behind you is drawn in ink and ahead of you in
+   --rule-strong, and the day figure under your rung is the only one at full ink. */
+.ranks {
+  flex: 0 0 auto;
+  border: 1px solid var(--rule-strong);
+  padding: var(--sp-2) var(--sp-3) 7px;
+}
+.ranks:empty { display: none; }
+.rk-top { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px var(--sp-2); }
+.rk-now { font: 600 var(--fs-sm)/1.2 var(--font-sans); color: var(--ink); }
+.rk-goal {
+  margin-left: auto;
+  font: 600 var(--fs-2xs)/1.2 var(--font-mono); letter-spacing: var(--ls-caps);
+  text-transform: uppercase; color: var(--ink-3);
+}
+.rk-rail { display: flex; margin-top: 7px; list-style: none; }
+.rk {
+  position: relative; flex: 1 1 0; min-width: 0;
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+}
+/* the rail itself: one segment per gap, drawn behind the marks and filled up to where you are */
+.rk + .rk::before {
+  content: ""; position: absolute; left: -50%; right: 50%; top: 12px;
+  height: 1px; background: var(--rule-strong);
+}
+.rk[data-state="past"]::before, .rk[data-state="now"]::before { height: 2px; background: var(--ink); top: 11px; }
+.rk-e {
+  position: relative;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: var(--r-1);
+  border: 1px solid var(--rule-strong); background: var(--sheet-raised);
+  font-size: 14px; line-height: 1;
+}
+.rk[data-state="past"] .rk-e { border-color: var(--ink-3); }
+.rk[data-state="now"] .rk-e { border-color: var(--ink); box-shadow: inset 0 0 0 2px var(--ink); }
+.rk[data-state="future"] .rk-e { opacity: .5; }
+.rk-d {
+  font: 700 9px/1 var(--font-mono); letter-spacing: var(--ls-caps); color: var(--ink-3);
+}
+.rk[data-state="now"] .rk-d { color: var(--ink); }
+
+/* ---- the rhythm, which is what actually groups this sheet ----
+   Contrast was raised and the sheet still read as a wall (dec. 80), because every gap on it was
+   roughly the same: 12px between the hero, the facts and the body, 16px between sections, 4px
+   inside them. Three near-identical steps are one step. It is 4 / 24 now - a 6x ratio - so a
+   block's own lines sit tight against each other and the space between blocks is unmistakable.
+   That is the boundary; the hairline was never going to do it on its own. */
+/* `overflow-y: auto` is the same guarantee the clue panel got in track 12, for the same defect:
+   this is a flex item with `flex: 1 1 auto`, so a sheet taller than the viewport squeezes it below
+   its content - and with nothing clipping, the last section PAINTS OVER the footer. The owner
+   photographed exactly that: the vote's verdict line lying across "Full solution" and "Play this
+   case again". The footer is `flex: 0 0 auto` and keeps its place; the body scrolls to reach the
+   rest. Adding a line of copy to a section must not be able to hide the buttons. */
+.r-body {
+  flex: 1 1 auto; min-height: 0;
+  display: grid; gap: var(--sp-5) var(--sp-5);
+  grid-template-columns: 1fr;
+  align-content: start;
+  overflow-y: auto; overscroll-behavior: contain;
+}
+/* min-height:0 on both: a grid item defaults to min-content, which is what lets a section with
+   a scroller inside it refuse to shrink and quietly paint over the footer. */
+.r-body > * { min-height: 0; }
+.r-body { margin-top: var(--sp-3); }
+.r-sec { display: flex; flex-direction: column; gap: var(--sp-1); min-width: 0; min-height: 0; }
+.r-sec[hidden] { display: none; }
+.r-foot { flex: 0 0 auto; display: flex; gap: var(--sp-2); margin-top: var(--sp-3); }
+.r-foot .btn { flex: 1; }
+/* the countdown rides the section heading rather than a dashed envelope of its own */
+.h3-note { order: 2; color: var(--ink-2); font-weight: 600; white-space: nowrap; }
+.h3::after { order: 1; }
+
+/* ---- histogram: one series, achromatic; "you" is the filled bar (spec 4.8) ---- */
+.hist { display: flex; align-items: flex-end; gap: 6px; height: 74px; }
+.hist .bin { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; height: 100%; min-width: 0; }
+.hist .bar { width: 100%; max-width: 30px; background: var(--groove); border: 1px solid var(--rule-strong); min-height: 3px; }
+.hist .bin.you .bar { background: var(--ink); border-color: var(--ink); }
+.histx { display: flex; gap: 6px; border-top: 1px solid var(--rule-strong); padding-top: 4px; }
+.histx span { flex: 1; text-align: center; font: 600 9px/1.3 var(--font-mono); color: var(--ink-3); min-width: 0; }
+.histx span.you { color: var(--ink); font-weight: 700; }
+.histx span em { display: block; font-style: normal; letter-spacing: var(--ls-caps); }
+
+/* ---- standings on the result sheet (task 3) ----
+   The tab rail, the rows and the pinned "you" line are ledger.css - the same table the
+   standalone weekly post draws. What is local here is the height budget: the list is the one
+   element on this screen allowed to be longer than its slot, so it scrolls inside its own box
+   while the page itself stays pinned (base.css). Four boards, all real: TODAY is the day's
+   race by time, WEEK and ALL-TIME are points, STREAK is the longest run - the last of these
+   existed on the server and had nowhere to appear until now. */
+.lb {
+  font-size: var(--fs-sm);
+  display: flex; flex-direction: column; min-height: 0;
+  /* Room for about four rows. The exact count is settled at paint time by `trimToFit()`, which
+     removes whatever does not fit - so this is a budget, not a promise about row height. It used
+     to be `4 x clamp(26px, 4.4vh, 36px)` PLUS `overflow-y: auto`, and those two disagree: four
+     notional row heights are not a whole number of real ones, so the list scrolled and opened on
+     the bottom half of row one. `hidden` rather than `auto` because this block does not scroll -
+     the way to the rest of the board is the button beside it (dec. 114). */
+  max-height: calc(4 * clamp(26px, 4.4vh, 36px));
+  overflow: hidden;
+}
+/* The inset is the ROW's, not the list's, so a highlighted row's fill reaches both edges of the
+   list rather than stopping short of the figure it is highlighting (dec. 94). */
+.lb { --row-pad: var(--sp-1); }
+#r-lbyou { margin-top: var(--sp-1); }
+/* "AHEAD OF 74%" is the hero's own sentence ("faster than 68% of 142 detectives") printed a
+   second time 300px lower, and on a 375px phone it was squeezing the name down to "u/…".
+   It stays on the standings screen and the weekly post, which have no hero to say it. */
+.rsheet .b-you > .b-tag { display: none; }
+.lb-foot { display: flex; align-items: center; gap: var(--sp-2); margin-top: 3px; }
+/* four rows of a 142-name board is what the sheet can spare; the way to the rest is a press,
+   not a scroll the page is not allowed to have. The button carries the count, so the note
+   beside it no longer has to repeat it. */
+.lb-all {
+  flex: 0 0 auto; min-height: 26px; padding: 0 var(--sp-2);
+  font: 600 var(--fs-xs)/1 var(--font-sans);
+}
+
+/* ---- tables (the full solution) ---- */
+table.rows { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
+.rows th {
+  text-align: left; padding: 5px var(--sp-2);
+  border-bottom: 1px solid var(--rule-strong);
+  font: 700 9px/1 var(--font-mono); letter-spacing: var(--ls-caps);
+  text-transform: uppercase; color: var(--ink-3);
+}
+.rows td { padding: 6px var(--sp-2); border-bottom: 1px solid var(--rule); color: var(--ink-2); white-space: nowrap; }
+.rows tr:last-child td { border-bottom: 0; }
+.rows td:first-child { color: var(--ink); font-weight: 600; }
+
+/* ---- vote (dec. 40): solid / hatched / empty + printed percentages ----
+   The dashed "sealed envelope" box is gone (dec. 80). It was a fourth framed thing on a sheet
+   that had too many, and everything in it - the next case number and its countdown - is one
+   short phrase that now rides the section heading. The SEALED stamp went with it; the screen's
+   one red is CLOSED, which is the mark this page is actually about. */
+.vote-row { display: flex; gap: var(--sp-2); }
+.vote-row .btn { flex: 1; min-height: 38px; font-size: var(--fs-sm); padding: 0 var(--sp-2); }
+.vote-done { flex: 1; font-size: var(--fs-sm); color: var(--ink-2); text-align: center; padding: var(--sp-1) 0; }
+.vote-done b { color: var(--ink); font-weight: 700; }
+/* before you vote the bar would be showing you the answer to the question the buttons are
+   asking, so it is not drawn at all - main.ts only fills it once a vote exists */
+.votebar:empty { display: none; }
+.vb-track { display: flex; height: 14px; border: 1px solid var(--rule-strong); margin-top: var(--sp-2); }
+.vb-seg { min-width: 0; overflow: hidden; border-right: 1px solid var(--rule-strong); transition: width .4s ease; }
+.vb-seg:last-child { border-right: 0; }
+.vb-seg.harder { background: var(--ink); }
+.vb-seg.same { background: repeating-linear-gradient(45deg, var(--rule-strong) 0 1px, transparent 1px 4px); }
+.vb-seg.softer, .vb-seg.empty { background: var(--groove); }
+/* The labels live INSIDE the segments now (track 12): the shape and the figure are one object
+   instead of a picture with a caption arguing beside it. `.vb-legend` is gone with the caption.
+   A segment narrower than ~18% carries no label - renderVoteBar decides that, because only it
+   knows the share - so nothing here has to clip, and `overflow: hidden` on the segment is the
+   belt to that brace. Ink on the filled segment is --paper for contrast; on the hatched and
+   hollow ones the ground is the sheet, so the label is ordinary ink. */
+.vb-track { height: 22px; }
+.vb-seg { display: flex; align-items: center; justify-content: center; gap: 5px; overflow: hidden; }
+.vb-k, .vb-n {
+  font: 700 var(--fs-2xs)/1 var(--font-mono);
+  letter-spacing: .06em; text-transform: uppercase; white-space: nowrap;
+}
+.vb-k { font-weight: 600; }
+.vb-seg.harder .vb-k, .vb-seg.harder .vb-n { color: var(--paper); }
+.vb-seg.same .vb-k, .vb-seg.same .vb-n, .vb-seg.softer .vb-k, .vb-seg.softer .vb-n { color: var(--ink); }
+/* What the vote has actually done - the sentence the bar cannot say. Sentence-case sans, because
+   it is read rather than scanned (spec §1.7), and under the bar because it is the bar's verdict. */
+.vote-note {
+  margin-top: var(--sp-2);
+  font: 400 var(--fs-sm)/1.35 var(--font-sans); color: var(--ink-2); text-align: center;
+}
+
+/* Two columns from 860px, placed rather than flowed. Left is the case's own numbers
+   (histogram, then tomorrow's vote); right is the standings, spanning both rows. Flowed, the
+   tall standings column set row 1's height and left a ~200px hole under the histogram - the
+   desktop screen was mostly that hole. Now the histogram takes the slack (a 900px screen can
+   afford taller bars than a phone) and the standings list fills whatever height the left
+   column ends up with, so neither column has to guess. */
+/* The histogram is a picture of the sentence directly above it ("faster than 68% of 142
+   detectives"), and it costs a heading, a chart and an eight-label axis - three of the blocks
+   the owner was counting. From 860px the sheet is two columns and the left one has room it
+   would otherwise waste, so that is where it lives; below that it is simply not drawn, and
+   nothing is lost that the hero has not already said (dec. 80). */
+#r-histblock { display: none; }
+@media (min-width: 860px) {
+  #r-histblock { display: flex; }
+  .rsheet { max-width: 880px; }
+  .r-body { grid-template-columns: 1fr 1fr; grid-template-rows: minmax(0, 1fr) auto; }
+  #r-histblock { grid-column: 1; grid-row: 1; align-self: start; }
+  #r-tomorrow { grid-column: 1; grid-row: 2; align-self: end; }
+  #r-lbblock { grid-column: 2; grid-row: 1 / span 2; align-self: stretch; }
+  #r-solution { grid-column: 1 / -1; grid-row: 1 / span 2; }
+  /* a 900px screen can afford a chart rather than a 74px strip */
+  #r-histblock .hist { height: clamp(90px, 18vh, 170px); }
+  /* flex-basis 0, not auto: with `auto` the list's 20 rows are its content height, which drove
+     the grid row, which drove the sheet to the full 900px - and left a 280px hole beside a
+     histogram that had nothing to fill it with. At 0 the list takes the height the LEFT column
+     ends up needing, the sheet goes back to being a sheet on a desk, and the rest of the board
+     is a press away on "See all". */
+  .lb { flex: 1 1 0; max-height: none; }
+}
+
+/* ========================= guest result ========================= */
+/* No time on the board, no rank, no streak - and no invented ones either (dec. 37/44). */
+.guest .r-body { max-width: 520px; margin: 0 auto; width: 100%; align-content: center; }
+.g-copy { font-size: var(--fs-sm); color: var(--ink-2); line-height: 1.5; }
+.g-list { list-style: none; display: flex; flex-direction: column; gap: var(--sp-1); margin-top: var(--sp-2); }
+.g-list li { display: flex; gap: var(--sp-2); align-items: flex-start; font-size: var(--fs-sm); color: var(--ink-2); }
+/* the same hollow box the board uses for an unsolved suspect: these are the boxes logging in ticks */
+.g-list li::before {
+  content: ""; flex: 0 0 auto; width: 7px; height: 7px; margin-top: 6px;
+  border: 1px solid var(--rule-strong);
+}
+.guest .r-foot { max-width: 520px; margin: 0 auto; width: 100%; }
+
+/* ========================= standings screen (task 3) =========================
+   "I imagined it as a table inside the game that anyone can study" - the owner. It is a
+   screen of its own, not an overlay: docs/02-gameplay.md forbids putting a leaderboard on
+   top of a board you are still solving, so this is reached only by an explicit press and
+   closes straight back to the board with nothing lost (the grid lives in the DOM either way).
+   Same frame as the game screen - a sheet on the desk - so the two read as two faces of one
+   file rather than two applications. */
+.standings {
+  height: 100%; width: 100%;
+  display: flex; align-items: center; justify-content: center;
+}
+.stsheet {
+  width: 100%; max-width: 620px; height: 100%;
+  display: flex; flex-direction: column; min-height: 0;
+  background: var(--sheet);
+}
+.st-head {
+  flex: 0 0 auto;
+  display: flex; align-items: center; gap: var(--sp-2);
+  padding: var(--sp-1) var(--sp-2) var(--sp-1) var(--sp-1);
+  border-bottom: 1px solid var(--rule-strong);
+}
+.st-head .st-title { flex: 1; min-width: 0; font: 700 var(--fs-sm)/1.2 var(--font-mono);
+  letter-spacing: var(--ls-caps); text-transform: uppercase;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.st-back { min-height: 34px; min-width: 34px; color: var(--ink-3); }
+/* It explains how a figure in this table is arrived at, so it is the one line on the screen that
+   must not be cut - and it was: 11px mono caps, one line, `text-overflow: ellipsis`, so at 360px
+   "POINTS = SPEED MINUS…" ended mid-formula (dec. 83). Sentence-case sans, wrapping to two lines,
+   costs ~14px on a screen whose list scrolls anyway. */
+.st-meta {
+  flex: 0 0 auto; padding: 5px var(--sp-3);
+  background: var(--groove); border-bottom: 1px solid var(--rule-strong);
+  font: 400 var(--fs-xs)/1.4 var(--font-sans);
+  color: var(--ink-3);
+}
+.standings .tabs { padding: 0 var(--sp-3); }
+/* The 12px gutter is on the rows, not on this box: on a full-screen ledger the meta strip and
+   the tab rail's rule already run edge to edge, and a row inset from both of them is the one
+   band on the screen that stops short - which is exactly what the "you" fill was doing (dec. 94).
+   `.b-empty` is not a row and keeps its own padding. */
+.st-list { --row-pad: var(--sp-3); display: flex; flex-direction: column; }
+.standings .b-you { margin: var(--sp-1) var(--sp-3) 0; }
+.st-foot {
+  flex: 0 0 auto;
+  display: flex; align-items: center; gap: var(--sp-2);
+  margin-top: var(--sp-1);
+  padding: var(--sp-2) var(--sp-3) calc(var(--sp-2) + env(safe-area-inset-bottom));
+  background: var(--groove);
+  border-top: 1px solid var(--rule-strong);
+}
+.st-foot .btn { flex: 0 0 auto; min-height: 38px; padding: 0 var(--sp-4); font-size: var(--fs-sm); }
+@media (min-width: 720px) {
+  .standings { padding: var(--sp-5) var(--sp-4); }
+  .stsheet {
+    height: auto; max-height: 100%;
+    border: 1px solid var(--rule-strong); box-shadow: var(--shadow-1);
+  }
+  .st-list { min-height: 220px; }
+}
+
+/* One sentence explaining a zero the player did not cause (dec. 123). Sentence-case sans, because
+   it is read rather than scanned, and recessed like the other lines whose job is to say how a
+   figure is arrived at. */
+.streak-note {
+  flex: 0 0 auto;
+  margin: var(--sp-1) 0 0;
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--groove);
+  border-left: 3px solid var(--rule-strong);
+  font: 400 var(--fs-xs)/1.45 var(--font-sans); color: var(--ink-2);
+}
+
+/* ========================= your file (docs/11-stats-ia.md §5) =========================
+   World ③ - you in this community, all time - given the one thing it never had: a place. It reuses
+   the standings' frame deliberately (`.standings` / `.stsheet` / `.st-head` / `.st-foot`): the two
+   screens are the same act of looking something up in the same archive, and a second chrome for it
+   would say they were different files. What is different is the body - ruled fact strips and the
+   rank ladder rather than a ranked list, because a file is not a race.
+
+   Your own row in a ledger is the way in, so it has to look like a way in. */
+.b-row.you { cursor: pointer; }
+.me-body {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto;
+  display: flex; flex-direction: column; gap: var(--sp-3);
+  padding: var(--sp-3);
+}
+/* Each strip is one question, so the gap between strips is the answer's boundary - and the strips
+   themselves are the result sheet's own `.facts` component, unchanged. */
+.me-days .h3 { margin-bottom: var(--sp-1); }
+/* `.lb` is clamped to four rows and scrolls, because that is what the RESULT SHEET can spare
+   around a hero, a histogram and a vote. Here the page itself scrolls and the list is the last
+   thing on it, so the clamp becomes a second scroller inside the first - which cost the values
+   their right-hand gutter and clipped the figures the rows exist for. */
+.me-days .lb {
+  --row-pad: 0;
+  max-height: none; overflow: visible;
+  border-top: 1px solid var(--rule-strong);
+}
+.me-days .b-name { font: 600 var(--fs-sm)/1.3 var(--font-mono); color: var(--ink-2); }
+/* The button that opens the file sits under the ladder and belongs to it - the block is one world,
+   and this is where the rest of that world is. */
+.me-link { flex: 0 0 auto; display: flex; justify-content: flex-end; margin-top: calc(-1 * var(--sp-2)); }
+.me-link .btn { min-height: 32px; padding: 0 var(--sp-2); font-size: var(--fs-xs); }
+
+/* ========================= toast + first-run ladder + coach marks ========================= */
+.toast {
+  position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(20px);
+  background: var(--sheet-raised); color: var(--ink);
+  border: 1px solid var(--rule-strong); border-radius: var(--r-1);
+  box-shadow: var(--shadow-1);
+  padding: var(--sp-2) var(--sp-4);
+  font-size: var(--fs-sm); line-height: 1.4;
+  opacity: 0; pointer-events: none; transition: all .25s; z-index: 60;
+  max-width: calc(100vw - 24px);
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ---- the stall nudge: the only message that arrives on its own (dec. 79) ----
+   Four things used to speak in the hint slip's voice - the standing instruction, the dead-end
+   verdict, this nudge, and the ladder's own buttons - and the owner could not tell which was
+   which. They are separated by form and by place now: the instruction is a caption under the
+   board, the verdict only ever answers a press of Hint, and this is a bar that slides in over
+   the bottom edge, one short line and one action. Different look, different place, different
+   moment of arrival. */
+.nudge {
+  position: fixed; bottom: 12px; z-index: 65;
+  left: var(--sp-2); right: var(--sp-2);
+  max-width: 440px; margin: 0 auto;
+  display: flex; align-items: center; gap: var(--sp-2);
+  padding: 6px 6px 6px var(--sp-3);
+  background: var(--sheet-raised); color: var(--ink);
+  border: 1px solid var(--ink);
+  box-shadow: var(--shadow-1);
+  animation: nudgein .25s ease-out;
+}
+@keyframes nudgein { from { opacity: 0; transform: translateY(10px); } }
+.nudge-txt { flex: 1 1 auto; min-width: 0; font-size: var(--fs-sm); line-height: 1.35; }
+.nudge .btn { flex: 0 0 auto; min-height: 32px; padding: 0 var(--sp-3); font-size: var(--fs-sm); }
+.nudge-x {
+  flex: 0 0 auto;
+  display: flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: var(--r-1); color: var(--ink-3);
+}
+@media (hover: hover) { .nudge-x:hover { background: var(--groove); color: var(--ink); } }
+
+.ladder {
+  position: fixed; inset: 0; z-index: 70; display: none;
+  align-items: center; justify-content: center;
+  padding: var(--sp-4); background: var(--scrim);
+}
+.ladder.show { display: flex; }
+.ladder-card {
+  width: 100%; max-width: 380px;
+  background: var(--sheet-raised); border: 1px solid var(--rule-strong);
+  box-shadow: var(--shadow-1);
+  padding: var(--sp-4);
+}
+.ladder-h { font: 800 var(--fs-lg)/1.2 var(--font-sans); margin-top: 3px; }
+.ladder-p { font-size: var(--fs-sm); color: var(--ink-2); line-height: 1.5; margin-top: var(--sp-2); }
+.ladder-btns { display: flex; flex-direction: column; gap: var(--sp-2); margin-top: var(--sp-4); }
+
+.coach { position: fixed; inset: 0; z-index: 80; display: none; }
+.coach.show { display: block; }
+.coach-ring {
+  position: absolute; border: 2px solid var(--ink);
+  box-shadow: 0 0 0 100vmax var(--scrim);
+  transition: all .25s ease-out; pointer-events: none;
+}
+.coach-tip {
+  position: absolute; max-width: 260px;
+  background: var(--sheet-raised); color: var(--ink);
+  border: 1px solid var(--rule-strong);
+  box-shadow: var(--shadow-1);
+  padding: var(--sp-3);
+  font-size: var(--fs-sm); line-height: 1.45;
+}
+.coach-btns { display: flex; gap: var(--sp-1); margin-top: var(--sp-2); justify-content: flex-end; }
+.coach-btns .btn { min-height: 32px; padding: 0 var(--sp-3); font-size: var(--fs-xs); }
+
+/* ========================= narrow: the meters wrap onto their own strip ========================= */
+@media (max-width: 719px) {
+  .casebar { gap: var(--sp-2); padding: 6px var(--sp-2) 0; }
+  .case-title { font-size: var(--fs-base); }
+  /* one component, two placements: on a phone the meters become a recessed strip of their own */
+  .hud {
+    flex-basis: 100%; margin: 6px -8px 0; padding: 3px var(--sp-2);
+    background: var(--groove); border-top: 1px solid var(--rule);
+    justify-content: space-between; gap: var(--sp-2);
+  }
+  .ticks i { width: 6px; height: 6px; }
+  .epilogue { padding: 3px var(--sp-2); }
+  /* the board is the last thing to get its height, and at 4px it missed its own bottom rule by
+     2-3px - which now that the grid is drawn in --rule-strong is a visibly amputated frame */
+  .bcell { padding: 3px 3px; }
+  .chip-m::before { inset: -8px -4px; }
+  .btn { padding: 0 var(--sp-3); font-size: var(--fs-sm); }
+  .controls { padding: 6px var(--sp-2) calc(6px + env(safe-area-inset-bottom)); }
+  .rsheet { padding: var(--sp-3); }
+  /* two facts, so they simply halve; the third (RANK) became the ladder below them (dec. 89) */
+  .fact { flex: 1 1 50%; }
+}
+/* phones: the clue list is the elastic part - tighten it before anything else */
+@media (max-width: 719px) and (max-height: 880px) {
+  .clue-item { padding: 5px var(--sp-3) 5px 8px; line-height: 1.35; }
+  .boardhelp { font-size: 10px; }
+}
+
+/* Nothing pays for the slip any more. It is absolutely positioned inside the board area, so it
+   costs no height at all: the clue list, the epilogue and the clue-panel head are exactly where
+   they were before it opened, which is what "appear on top" means. */
+
+/* ========================= density: cases carry 7-15 clues ========================= */
+/* More clues need more room; the clue list tightens so the board keeps its tap targets. */
+.app[data-density="dense"] .clue-item { padding-top: 4px; padding-bottom: 4px; line-height: 1.3; }
+.app[data-density="tight"] .clue-item { padding-top: 2px; padding-bottom: 2px; font-size: var(--fs-xs); line-height: 1.3; }
+.app[data-density="tight"] .clue-item .num { width: 15px; height: 15px; font-size: 9px; line-height: 13px; }
+/* The 15-clue case (one in the bank, and it is GREEN - i.e. it will be a daily). `tight` was cut
+   for the 14-clue tutorial and one more row is one row too many: +10px past the box at 375x667,
+   +16px at 360x800, cut off in silence both times. */
+.app[data-density="tightest"] .clue-item {
+  padding-top: 1px; padding-bottom: 1px; font-size: var(--fs-xs); line-height: 1.25;
+}
+.app[data-density="tightest"] .clue-item .num { width: 15px; height: 15px; font-size: 9px; line-height: 13px; }
+
+/* ========================= short viewports ========================= */
+/* Inline height ("regular" = 320px) is only ever the splash, but the game must degrade
+   gracefully if a client renders it inline anyway - drop chrome, never scroll. */
+@media (max-height: 700px) {
+  .epilogue { display: none; }
+  .clue-item { padding: 4px var(--sp-2) 4px 7px; font-size: var(--fs-xs); line-height: 1.35; }
+  .clue-item .num { width: 15px; height: 15px; font-size: 9px; line-height: 13px; }
+  .cluehead { padding: 3px var(--sp-2) 2px; }
+  .grid-area { padding: 4px 6px; gap: 4px; }
+  .notice-head { min-height: 20px; }
+  .notice-body { padding: 4px var(--sp-2); }
+  .hint-step { min-height: 32px; }
+  .hint-ladder { margin-top: var(--sp-1); }
+  .boardhelp { line-height: 1.35; }
+  /* the histogram is the one redundant block on the result screen - the hero line already says
+     "faster than N% of M detectives". On a 667px phone it is what has to give, not the vote. */
+  #r-histblock { display: none; }
+  .rsheet { padding: var(--sp-2) var(--sp-3) var(--sp-3); gap: var(--sp-1); }
+  .hero { padding: var(--sp-1) 0 var(--sp-2); }
+  .hero-time { font-size: var(--fs-xl); }
+  .hero-sub { font-size: var(--fs-sm); }
+  .fact { padding: 5px var(--sp-2); }
+  .fact .v { font-size: var(--fs-sm); margin-top: 2px; }
+  .rows td { padding: 3px var(--sp-2); }
+  .vote-row .btn { min-height: 32px; }
+  .envelope { padding: 5px var(--sp-2); gap: var(--sp-2); }
+  .env-top { font-size: var(--fs-xs); }
+}
+/* The short-viewport block above resets `.clue-item` padding, so a 14-15 clue case has to say
+   again that it is tight - measured at 375x667, where the list ran 8px past its own box and
+   `overflow: hidden` meant the last clue was cut off in silence. */
+@media (max-height: 700px) {
+  .app[data-density="tight"] .clue-item { padding-top: 1px; padding-bottom: 1px; line-height: 1.25; }
+  .app[data-density="tightest"] .clue-item { padding-top: 0; padding-bottom: 0; line-height: 1.2; }
+  .app[data-density="dense"] .clue-item { padding-top: 3px; padding-bottom: 3px; }
+}
+@media (max-height: 700px) and (max-width: 719px) {
+  .casebar { padding: 4px var(--sp-2) 0; }
+  .hud { margin-top: 4px; }
+  .bname { padding: 1px var(--sp-2); font-size: var(--fs-xs); }
+  .bhead > span { padding: 2px 0; }
+  .bcell { padding: 3px 2px; }
+  .controls { padding: 4px var(--sp-2) calc(4px + env(safe-area-inset-bottom)); }
+}
+@media (max-height: 560px) {
+  .hud .meter:first-child { display: none; }
+  .ladder-card { padding: var(--sp-3); }
+  .ladder-h { font-size: var(--fs-md); }
+  .ladder-p { font-size: var(--fs-xs); margin-top: var(--sp-1); }
+  .ladder-btns { margin-top: var(--sp-2); }
+}

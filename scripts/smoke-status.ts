@@ -60,7 +60,27 @@ for (let i = 0; i < BANK.length; i++) {
   }
 }
 
-console.log(`Cases checked: ${BANK.length}`);
+// ── pinned indices: a live post stores its bank index in postData ──
+// If a rebuild moves what sits at an index, every open post on that index silently starts showing
+// a DIFFERENT puzzle and throws away the player's saved board. The first 120 entries must survive
+// every rebuild unchanged; these two are additionally referenced by name from the server.
+const PINNED: [number, string, string, number, string][] = [
+  // idx, themeId, tier, clues, solution fingerprint (first suspect's row)
+  [72, "pizza", "green", 10, "John=Blue|09:00|Scroll"],   // SHOWCASE_IDX - the judge/demo post
+  [78, "pizza", "green", 12, "John=Purple|18:00|Spoon"],  // the old fixed warm-up, now in the pool
+];
+for (const [i, themeId, tier, nClues, fingerprint] of PINNED) {
+  const e = BANK[i];
+  const s = e?.suspects[0];
+  const got = e ? `${s}=${e.solution[s].flair}|${e.solution[s].time}|${e.solution[s].object}` : "missing";
+  if (!e || e.themeId !== themeId || e.tier !== tier || e.clues.length !== nClues || got !== fingerprint) {
+    fails++;
+    console.log(`[FAIL] pinned idx ${i} moved: ${e?.themeId}/${e?.tier} ${e?.clues.length} clues ${got}` +
+      ` (expected ${themeId}/${tier} ${nClues} clues ${fingerprint}) - live posts on this index would break`);
+  }
+}
+
+console.log(`Cases checked: ${BANK.length} · pinned indices verified: ${PINNED.map(([i]) => i).join(", ")}`);
 console.log(fails === 0
   ? "OK ✅ - on the solution every clue is green, the client detects solved, the server confirms (client and server agree)"
   : `FAILURES: ${fails} ❌`);

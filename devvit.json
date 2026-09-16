@@ -5,6 +5,10 @@
     "dir": "dist/client",
     "entrypoints": {
       "default": {
+        "entry": "splash.html",
+        "height": "regular"
+      },
+      "game": {
         "entry": "index.html",
         "height": "tall"
       }
@@ -13,6 +17,30 @@
   "server": {
     "dir": "dist/server",
     "entry": "index.cjs"
+  },
+  "scheduler": {
+    "tasks": {
+      "user-flair": {
+        "endpoint": "/internal/scheduler/user-flair"
+      },
+      "lb-rollup": {
+        "endpoint": "/internal/cron/rollup",
+        "cron": "0 3 * * *"
+      },
+      "daily-post": {
+        "endpoint": "/internal/scheduler/daily-post",
+        "cron": "0 * * * *"
+      },
+      "daily-check": {
+        "endpoint": "/internal/scheduler/daily-check"
+      },
+      "case-close": {
+        "endpoint": "/internal/scheduler/case-close"
+      },
+      "case-record": {
+        "endpoint": "/internal/scheduler/case-record"
+      }
+    }
   },
   "permissions": {
     "redis": true,
@@ -33,17 +61,72 @@
         "endpoint": "/internal/menu/create-post"
       },
       {
-        "label": "Deducto: publish showcase (judges)",
-        "description": "Create a fixed demo post, decoupled from the daily vote ramp",
+        "label": "Deducto: how is this case doing?",
+        "description": "How many opened, played and solved it, and where players give up",
+        "forUserType": "moderator",
+        "location": [
+          "post"
+        ],
+        "postFilter": "currentApp",
+        "endpoint": "/internal/menu/funnel"
+      },
+      {
+        "label": "Deducto: what is actually in the database?",
+        "description": "Raw Redis state for this case, the day and the whole sub - summary here, full dump in devvit logs",
+        "forUserType": "moderator",
+        "location": [
+          "post"
+        ],
+        "postFilter": "currentApp",
+        "endpoint": "/internal/menu/audit"
+      },
+      {
+        "label": "Deducto: daily auto-post status",
+        "description": "Is it on, when does it publish, and is the last auto-post still alive",
         "forUserType": "moderator",
         "location": [
           "subreddit"
         ],
-        "endpoint": "/internal/menu/create-showcase"
+        "endpoint": "/internal/menu/daily-status"
+      },
+      {
+        "label": "Deducto: pause/resume daily auto-post",
+        "description": "Stop the schedule now, or lift a pause the survival check put in place",
+        "forUserType": "moderator",
+        "location": [
+          "subreddit"
+        ],
+        "endpoint": "/internal/menu/daily-toggle"
+      },
+      {
+        "label": "Deducto: close this case now",
+        "description": "Post the winner comment immediately instead of waiting for the 24-hour mark",
+        "forUserType": "moderator",
+        "location": [
+          "post"
+        ],
+        "postFilter": "currentApp",
+        "endpoint": "/internal/menu/close-case"
       }
     ]
   },
   "dev": {
     "subreddit": "deducto_puzzle_dev"
+  },
+  "settings": {
+    "subreddit": {
+      "dailyAutoPost": {
+        "type": "boolean",
+        "label": "Publish a case automatically every day",
+        "helpText": "Off by default. Turn this on only in a subreddit with live players - an empty subreddit taking one bot post a day is the pattern Reddit's antispam acts on. If a published case is filtered, the app stops the schedule by itself and sends modmail.",
+        "defaultValue": false
+      },
+      "dailyPostHourUtc": {
+        "type": "number",
+        "label": "Hour (UTC) to publish the daily case",
+        "helpText": "0-23. The schedule is checked every hour and publishes once, on this hour.",
+        "defaultValue": 13
+      }
+    }
   }
 }

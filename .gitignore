@@ -12,3 +12,10 @@ DEPLOY.md
 Thumbs.db
 .vscode/
 .idea/
+
+# per-chat task tracker (local only)
+CURRENT_WORK.md
+
+# internal execution plans (kept local, not for public repo)
+plans/
+__pycache__/

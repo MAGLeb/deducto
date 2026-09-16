@@ -1,0 +1,117 @@
+/* ============================================================================
+   Deducto design tokens - the ONLY file in src/client that holds literal values.
+   Everything else references these through var(); swapping the visual language
+   (docs/10-design-spec.md) is a rewrite of this file, not of the components.
+
+   D3 "Manila". One idea: colour belongs to evidence, chrome is ink on paper.
+   The only hues in the system are the four Okabe-Ito coats and one archive red.
+   Light is the base; dark arrives through prefers-color-scheme. Devvit offers no
+   theme toggle, so the media query is the whole mechanism - a white rectangle in
+   a dark feed is as foreign as a black one in a light feed.
+
+   2026-08-08, the surface ladder repair (dec. 71). The first cut of this file put
+   all four surfaces inside 1.09-1.46:1 of each other, which is below the ~2:1 where
+   a lightness step becomes a visible edge: the result card sat on the page at 1.29:1
+   and simply had no boundary. The metaphor already said what to do - `--paper` is
+   the folder on the desk and `--sheet` is the sheet laid ON it, so they were never
+   meant to be the same tone. Numbers: plans/assets/proto/04-polish/palette.py.
+   ============================================================================ */
+:root {
+  color-scheme: light dark;
+
+  /* ---- surfaces: higher is lighter, in BOTH themes ----
+     The two ceilings that shape this ladder, both measured:
+       - a surface carrying --ink-3 text at AA cannot go below lum .583, which floors
+         --groove and caps --sheet/--groove at 1.51:1;
+       - --sheet-raised is capped by white, so --sheet/--sheet-raised can never pass ~1.1:1.
+     Everything raised therefore also carries a --rule-strong boundary and --shadow-1;
+     lightness alone cannot draw that edge and is not asked to. */
+  --paper: #BEAD8C;               /* page ground - the folder / the desk. 2.00:1 under --sheet */
+  --sheet: #F8F4EB;               /* the primary surface: case file, panels, board */
+  --sheet-raised: #FFFDF8;        /* raised: result sheet, hover, hint slip */
+  --groove: #D9CFBA;              /* recessed strips: meter bar, controls, th, empty chip */
+
+  /* ---- ink: exactly three reading steps and one inverse ----
+     NOTHING BUT --ink MAY BE SET ON --paper. The desk is 2:1 below the sheet, which puts
+     --ink-2 at 4.43:1 and --ink-3 at 3.40:1 on it - fine as a boundary, short of AA as text.
+     No component does; the screenshot harness asserts it on every frame it shoots. */
+  --ink: #1B1815;                 /* primary text, filled CTA, the "circled" ring */
+  --ink-2: #4A433A;               /* clue text, secondary values, ghost-button label */
+  --ink-3: #5C5446;               /* caps labels, captions, muted/satisfied text */
+  --ink-inv: #FFFDF8;             /* text on any ink fill */
+  --strike: #4A433A;              /* the pen stroke over a ruled-out candidate */
+
+  /* ---- lines ----
+     --rule was 1.48:1 on the sheet, i.e. a hairline nobody could see; at 1.91:1 it is
+     still decorative but the rows it divides now read as rows. --rule-strong went the
+     other way, to clear 3:1 on the darkened --paper as well (3.04:1) - one structural
+     line token, still, and now genuinely valid on all four surfaces in both themes. */
+  --rule: #BEB299;                /* decorative hairline. Carries NO meaning. */
+  --rule-strong: #655B47;         /* structure + every control boundary (>=3:1 on all four surfaces) */
+
+  /* ---- elevation: a printed drop, not a photographic one (dec. 71) ----
+     Two hard offsets and one 8px blur, both derived from --ink, so it darkens the
+     paper the sheet is lying on rather than adding a grey. Used ONLY where a sheet
+     genuinely floats over another surface; never on a full-bleed phone layout. */
+  --shadow-1:
+    0 1px 0 color-mix(in srgb, var(--ink) 16%, transparent),
+    0 3px 8px color-mix(in srgb, var(--ink) 10%, transparent);
+
+  /* ---- the one accent: archive red. At most one meaning per screen. ---- */
+  --stamp: #9E2B1C;
+  --stamp-ink: #FFFDF8;
+  --stamp-wash: #E4C8BD;          /* 22% --stamp over --sheet */
+  --scrim: color-mix(in srgb, var(--paper) 76%, transparent);
+
+  /* ---- evidence: the coats (Okabe-Ito, dec. 16). Letter ink is per-coat. ----
+     The -out washes are 22% of the coat over --sheet (28% in dark), recomputed
+     for the sheet's new value. */
+  --coat-r: #D55E00; --coat-r-ink: #100D0A; --coat-r-out: #F0D3B7;
+  --coat-b: #0072B2; --coat-b-ink: #FFFDF8; --coat-b-out: #C1D7DE;
+  --coat-g: #009E73; --coat-g-ink: #100D0A; --coat-g-out: #C1E1D1;
+  --coat-p: #CC79A7; --coat-p-ink: #100D0A; --coat-p-out: #EED9DC;
+
+  /* ---- type: three families, eight steps ---- */
+  --font-sans:  -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono:  ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --font-serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia,
+                "Times New Roman", serif;
+  --fs-2xs: 11px; --fs-xs: 12px; --fs-sm: 13px; --fs-base: 15px;
+  --fs-md: 17px;  --fs-lg: 21px; --fs-xl: 26px; --fs-2xl: 34px;
+  --ls-caps: .12em;
+
+  /* ---- spacing (4pt), radii (paper has two), metrics ---- */
+  --sp-0: 2px; --sp-1: 4px; --sp-2: 8px; --sp-3: 12px;
+  --sp-4: 16px; --sp-5: 24px; --sp-6: 32px; --sp-7: 48px;
+  --r-0: 0; --r-1: 2px;
+  --chip: 34px; --tap: 44px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    /* Dark cannot buy the steps light can: four surfaces near black all live inside
+       lum 0-.035 once --ink-3 and --stamp have to clear AA on the topmost one, which
+       caps --paper/--sheet-raised at ~1.6:1. So dark spends its budget on lines instead
+       - --rule reaches 1.84:1 and --rule-strong 4.58:1 on the sheet, where a light line
+       on a dark ground reads far better than the reverse. */
+    --paper: #0A0907; --sheet: #2A2419; --sheet-raised: #3B3422; --groove: #16130E;
+    --ink: #F2ECE0; --ink-2: #D2C8B5; --ink-3: #A89E87; --ink-inv: #16130E; --strike: #D2C8B5;
+    --rule: #554D3D; --rule-strong: #968B75;
+    --shadow-1:
+      0 1px 0 color-mix(in srgb, var(--paper) 70%, transparent),
+      0 3px 10px color-mix(in srgb, var(--paper) 55%, transparent);
+    --stamp: #E8886F; --stamp-ink: #16130E; --stamp-wash: #483427;
+    --coat-b: #56B4E9; --coat-b-ink: #100D0A;
+    --coat-r-out: #5A3412; --coat-b-out: #364C53; --coat-g-out: #1E4632; --coat-p-out: #573C41;
+  }
+}
+
+/* The app ships with the media query only - Devvit gives no theme toggle and the
+   webview inherits the client's scheme. The :not([data-theme="light"]) guard is
+   the spec's, kept so a harness can pin the light theme without forking this file. */
+
+@media (min-width: 720px) { :root { --chip: 44px; } }
+@media (max-width: 719px) { :root { --chip: 28px; } }
+@media (max-height: 700px) { :root { --tap: 40px; --fs-base: 14px; } }
+@media (max-height: 700px) and (min-width: 720px) { :root { --chip: 34px; } }
+@media (max-height: 700px) and (max-width: 719px) { :root { --chip: 26px; } }

@@ -13,7 +13,15 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+    // @devvit/web picks its entry through the "browser" export condition, which a single
+    // project-wide tsconfig cannot switch on per-directory (customConditions:["browser"] would
+    // flip the server half to its panic stub). Point the client subpath straight at its types;
+    // at build time Vite already resolves it through the browser condition.
+    "paths": {
+      "@devvit/web/client": ["./node_modules/@devvit/web/client/index.d.ts"],
+      "@devvit/client": ["./node_modules/@devvit/client/index.d.ts"]
+    }
   },
   "include": ["src/**/*", "scripts/**/*"]
 }

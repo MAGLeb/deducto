@@ -6,7 +6,8 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "build:bank": "tsx scripts/build-bank.ts 120",
+    "build:bank": "tsx scripts/build-bank.ts 160",
+    "check:solvability": "tsx scripts/check-solvability.ts",
     "build:client": "cd src/client && vite build",
     "build:server": "cd src/server && vite build",
     "build": "npm run build:bank && npm run build:client && npm run build:server",
@@ -19,17 +20,20 @@
     "launch": "npm run build && devvit upload && devvit publish && npm run install:all",
     "login": "devvit login",
     "test": "tsx src/server/engine.test.ts",
-    "type-check": "tsc --noEmit"
+    "test:routes": "tsx --tsconfig src/server/testing/tsconfig.json src/server/routes.test.ts",
+    "type-check": "tsc --noEmit",
+    "check:fixture": "tsc -p plans/assets/proto/12-fonts/tsconfig.json",
+    "check:layout": "bash plans/assets/proto/12-fonts/fast.sh"
   },
   "dependencies": {
-    "@devvit/web": "0.13.7",
+    "@devvit/web": "0.13.11",
     "express": "5.1.0"
   },
   "devDependencies": {
     "@types/express": "5.0.1",
     "@types/node": "^22.12.0",
     "concurrently": "9.1.0",
-    "devvit": "0.13.7",
+    "devvit": "0.13.11",
     "tsx": "4.23.0",
     "typescript": "5.8.3",
     "vite": "7.3.5"

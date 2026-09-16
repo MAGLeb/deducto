@@ -13,7 +13,8 @@ export function difficultyScore(e: ScorableEntry): number {
   const relational = e.clues.filter((c) => c.k === "before" || c.k === "nsame").length;
   const relRatio = n ? relational / n : 0;
   const hooks = e.clues.filter((c) => c.k === "same" && (c.a[0] === "time" || c.b[0] === "time")).length;
-  const tierBase = e.tier === "green" ? 0 : 55; // 🟡 sits well above 🟢
+  // 🟡 sits well above 🟢; "tutorial" is an over-clued 🟢 and must sort below every real green.
+  const tierBase = e.tier === "tutorial" ? -30 : e.tier === "green" ? 0 : 55;
   const s = tierBase + (12 - n) * 3 + relRatio * 45 - hooks * 5;
   return Math.round(s);
 }
@@ -22,33 +23,27 @@ export function difficultyScore(e: ScorableEntry): number {
 async function main() {
   const bank = (await import("../src/server/bank.json", { with: { type: "json" } })).default as unknown as ScorableEntry[];
   const rows = bank.map((e) => ({ tier: e.tier, n: e.clues.length, score: difficultyScore(e) }));
-  const green = rows.filter((r) => r.tier === "green").map((r) => r.score);
-  const yellow = rows.filter((r) => r.tier === "yellow").map((r) => r.score);
   const stat = (a: number[]) => a.length ? `min=${Math.min(...a)} max=${Math.max(...a)} mean=${(a.reduce((x, y) => x + y, 0) / a.length).toFixed(1)} span=${Math.max(...a) - Math.min(...a)}` : "-";
-  console.log(`GREEN (${green.length}): ${stat(green)}`);
-  console.log(`YELLOW (${yellow.length}): ${stat(yellow)}`);
 
-  // text histogram of yellow scores (5-pt buckets) - does 🟡 spread or clump?
-  const lo = Math.min(...yellow);
-  const W = 4;
-  const bins: Record<number, number> = {};
-  for (const s of yellow) { const b = Math.floor((s - lo) / W); bins[b] = (bins[b] ?? 0) + 1; }
-  console.log("\nYELLOW score histogram (bucket width " + W + "):");
-  const maxB = Math.max(...Object.keys(bins).map(Number));
-  for (let b = 0; b <= maxB; b++) {
-    const c = bins[b] ?? 0;
-    console.log(`  ${String(lo + b * W).padStart(3)}-${String(lo + b * W + W - 1).padStart(3)}: ${"█".repeat(c)} ${c}`);
+  for (const tier of ["tutorial", "green", "yellow", "red"]) {
+    const s = rows.filter((r) => r.tier === tier).map((r) => r.score);
+    if (s.length) console.log(`${tier.toUpperCase().padEnd(8)} (${s.length}): ${stat(s)}`);
   }
 
-  // proposed 4 equal-count (quantile) bins across ALL cases → resolution for the daily ramp
-  const sorted = rows.map((r) => r.score).sort((a, b) => a - b);
-  const NB = 4;
-  const cuts = Array.from({ length: NB - 1 }, (_, i) => sorted[Math.floor(((i + 1) / NB) * sorted.length)]);
-  console.log(`\nProposed ${NB} quantile bins, cut points: ${cuts.join(", ")}`);
-  const binOf = (s: number) => cuts.filter((c) => s >= c).length;
-  const binCounts = new Array(NB).fill(0);
-  for (const r of rows) binCounts[binOf(r.score)]++;
-  console.log("bin sizes:", binCounts.join(" / "), "(want roughly balanced)");
+  // text histogram per tier - do the tiers separate, or does one swallow the next?
+  const W = 4;
+  for (const tier of ["tutorial", "green", "yellow"]) {
+    const s = rows.filter((r) => r.tier === tier).map((r) => r.score);
+    if (!s.length) continue;
+    const lo = Math.min(...s);
+    const bins: Record<number, number> = {};
+    for (const v of s) { const b = Math.floor((v - lo) / W); bins[b] = (bins[b] ?? 0) + 1; }
+    console.log(`\n${tier.toUpperCase()} score histogram (bucket width ${W}):`);
+    for (let b = 0; b <= Math.max(...Object.keys(bins).map(Number)); b++) {
+      const c = bins[b] ?? 0;
+      console.log(`  ${String(lo + b * W).padStart(4)}-${String(lo + b * W + W - 1).padStart(4)}: ${"█".repeat(c)} ${c}`);
+    }
+  }
 }
 
 // tsx runs this file directly; skip when imported by build-bank

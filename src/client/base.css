@@ -1,0 +1,200 @@
+/* Primitives shared by all three entrypoints (splash + game + leaderboard).
+   Values only via tokens.css - not one literal colour lives below this import.
+   D3 "Manila": chrome is ink on paper, so everything here is achromatic. */
+@import "./tokens.css";
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+/* every component below sets an explicit `display`, which would otherwise out-specify the UA
+   rule behind the `hidden` attribute. `hidden` means not rendered, and it always wins. */
+[hidden] { display: none !important; }
+
+html, body {
+  height: 100%;
+  /* Scrolling inside a Reddit webview is prohibited (Featuring Guide) - every screen is laid
+     out to fit, and this makes a scrollbar structurally impossible rather than merely unlikely. */
+  overflow: hidden;
+  overscroll-behavior: none;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: var(--fs-base);
+  line-height: 1.5;
+  -webkit-text-size-adjust: 100%;
+  -webkit-font-smoothing: antialiased;
+}
+
+button, input { font-family: inherit; color: inherit; }
+button { touch-action: manipulation; cursor: pointer; background: none; border: none; }
+/* Ink, not blue: 14.6-15.8:1 on the sheet in both themes, and at offset 2 it lands on
+   paper even around a saturated coat chip. */
+:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+svg { display: block; }
+
+.mono, .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+/* ---- caps: the replacement for every emoji label in the chrome (spec 4.2) ----
+   The letter-spacing is structural - it is what separates "a label" from "shouting",
+   and why an 11px caps label still scans. */
+.caps {
+  font: 700 var(--fs-2xs)/1 var(--font-mono);
+  letter-spacing: var(--ls-caps);
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+/* ---- stamp: a boxed, letter-spaced, slightly rotated mono mark (spec 4.1) ----
+   The 3deg tilt is what makes it read as a stamp rather than a badge; it is the only
+   rotation in the system. Reserved for TIER / CLOSED / NOT RECORDED / WARM-UP SOLVED / FILE UNAVAILABLE. */
+.stamp {
+  display: inline-block;
+  font: 800 var(--fs-2xs)/1 var(--font-mono);
+  letter-spacing: var(--ls-caps);
+  text-transform: uppercase;
+  padding: 4px 6px;
+  border: 1.5px solid currentColor;
+  border-radius: var(--r-1);
+  transform: rotate(-3deg);
+  white-space: nowrap;
+  color: var(--ink-3);
+}
+.stamp:empty { display: none; }
+.stamp.red { color: var(--stamp); }
+.stamp.solid { background: var(--stamp); border-color: var(--stamp); color: var(--stamp-ink); }
+.stamp.lg { font-size: var(--fs-sm); padding: 6px 9px; border-width: 2px; }
+
+/* ---- the tier stamp: a word anyone can rank, over the denominator the ordinal never had ----
+   Third attempt (dec. 86). "TIER II" alone failed because an ordinal without a denominator is
+   not a scale; "TIER II / LINK TWO CLUES" failed again because the second line is an imperative
+   and reads as an instruction for the next tap. The word comes first and is the largest thing in
+   the box - EASY / MEDIUM / HARD are ordered in English without any comparison to make - and the
+   line under it supplies the missing scale: LEVEL 2 OF 3. The ladder's second channel is still
+   the stamp's own weight (light ink outlined, full ink outlined, full ink double-ruled), because
+   colour is the one channel this system will not spend on chrome and the first to die in
+   greyscale and under CVD. */
+.stamp.tier {
+  display: inline-flex; flex-direction: column; align-items: center; gap: 2px;
+  line-height: 1; text-align: center;
+}
+.stamp.tier .t-word { font: 800 var(--fs-xs)/1 var(--font-mono); letter-spacing: var(--ls-caps); }
+.stamp.tier .t-scale {
+  font: 600 9px/1 var(--font-mono);
+  letter-spacing: .06em; opacity: .85;
+}
+.stamp.tier[data-rank="0"], .stamp.tier[data-rank="1"] { color: var(--ink-3); }
+.stamp.tier[data-rank="2"] { color: var(--ink-2); border-width: 2px; }
+.stamp.tier[data-rank="3"] { color: var(--ink); border-width: 4px; border-style: double; }
+.stamp.tier.lg .t-word { font-size: var(--fs-md); }
+.stamp.tier.lg .t-scale { font-size: var(--fs-2xs); }
+
+/* ---- micro tag: a boxed caps mark that is NOT a stamp (no tilt, no 800 weight) ----
+   Filled = "this row is you"; outlined = a qualifier on someone else's row. */
+.tag {
+  display: inline-block;
+  font: 700 var(--fs-2xs)/1 var(--font-mono);
+  letter-spacing: var(--ls-caps);
+  text-transform: uppercase;
+  padding: 3px 5px;
+  border-radius: var(--r-1);
+  background: var(--ink);
+  color: var(--ink-inv);
+  white-space: nowrap;
+}
+.tag.hollow { background: transparent; color: var(--ink-2); box-shadow: inset 0 0 0 1px var(--rule-strong); }
+
+/* ---- `You`, and the one place this system spends colour on something that is not evidence ----
+   "Colour belongs to the evidence, chrome is ink on paper" is the rule the whole palette is built
+   on, and an ink-filled 9px box obeying it is exactly what the owner kept failing to find on a
+   board of twenty rows: "YOU - хочется выделять как-то лучше", asked three times. The rule is kept
+   where it was earned and bent where it was costing the reader the one thing they open a
+   leaderboard to look for - their own row. The standings screen spends no red at all, so this
+   takes it without competing with anything; on the splash the case number is red too, and both
+   marks are the same object - the thing on this card that identifies somebody.
+   `.tag.pb` ("Your best") is deliberately NOT included: game.css reserves that screen's single red
+   for the CLOSED stamp, and a personal record does not get to compete with the verdict.
+
+   The pulse is a one-shot on arrival, not a loop - it says "here" once and then stops being
+   motion, which is the difference between a marker and a distraction on a card the feed scrolls
+   past. `both` holds the end frame, so a reader who arrives after it has run sees the settled tag
+   rather than an unstyled one. */
+.tag.you { background: var(--stamp); color: var(--stamp-ink); animation: you-mark 700ms ease-out both; }
+@keyframes you-mark {
+  0%   { transform: scale(.7);  box-shadow: 0 0 0 0 color-mix(in srgb, var(--stamp) 55%, transparent); }
+  45%  { transform: scale(1.15); }
+  100% { transform: scale(1);   box-shadow: 0 0 0 8px color-mix(in srgb, var(--stamp) 0%, transparent); }
+}
+@media (prefers-reduced-motion: reduce) { .tag.you { animation: none; } }
+
+/* ---- buttons (spec 4.3): one filled button per screen, maximum ---- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-2);
+  min-height: var(--tap);
+  padding: 0 var(--sp-4);
+  border: 1px solid transparent;
+  border-radius: var(--r-1);
+  background: none;
+  color: var(--ink);
+  font: 600 var(--fs-base)/1 var(--font-sans);
+  transition: background .15s, color .15s, border-color .15s;
+}
+.btn.primary { background: var(--ink); border-color: var(--ink); color: var(--ink-inv); }
+.btn.secondary { border-color: var(--rule-strong); color: var(--ink); }
+.btn.ghost { color: var(--ink-2); }
+.btn.icon { min-width: var(--tap); padding: 0; flex: 0 0 auto; }
+.btn:disabled { color: var(--ink-3); border-color: var(--rule); cursor: default; background: none; }
+.btn.primary:disabled { background: var(--groove); border-color: var(--rule); color: var(--ink-3); }
+
+/* ---- hover, in one place (dec. 73) ----
+   Every hover rule in the client is inside this query and every one is guarded against
+   :disabled. Two reasons it is a query and not a bare pseudo-class: on a touch screen
+   :hover latches on after a tap and leaves a button looking pressed until you tap
+   elsewhere, and the spec's "the destructive red is absent on touch" was, until now,
+   only true on paper. Anything the pointer can act on answers to it - buttons, the hint
+   rungs, tabs, pagers, board chips, leaderboard tabs. */
+@media (hover: hover) {
+  .btn:hover:not(:disabled) { background: var(--groove); }
+  .btn.primary:hover:not(:disabled) { background: var(--ink-2); border-color: var(--ink-2); }
+  .btn.secondary:hover:not(:disabled) { background: var(--sheet-raised); border-color: var(--ink-2); }
+  .btn.ghost:hover:not(:disabled) { background: var(--groove); color: var(--ink); }
+}
+/* Pressed state: the same acknowledgement on a finger as on a pointer. */
+.btn:active:not(:disabled) { transform: translateY(1px); }
+
+/* ---- armed: a two-tap action waiting for its second tap (dec. 91) ----
+   This is where "this press destroys something" belongs - on the control, at the moment the
+   press has actually been made, not as a red outline on an idle button nobody has touched yet.
+   Achromatic by the same rule as everything else in the chrome: full ink, an ink boundary and a
+   filled ground, i.e. the heaviest a control in this system ever gets. Red is spent on the
+   contradicted clue and on nothing else. */
+.btn[data-armed] { color: var(--ink); border-color: var(--ink); background: var(--groove); }
+.btn[data-armed] svg { stroke-width: 2.2; }
+
+/* ---- progress ticks: 12 countable squares, achromatic (spec 4.6) ---- */
+.ticks { display: inline-flex; gap: 3px; align-items: center; }
+.ticks i { width: 7px; height: 7px; border: 1px solid var(--rule-strong); }
+.ticks i.on { background: var(--ink); border-color: var(--ink); }
+
+/* ---- coat letter marker (R/B/G/P): a chip at reading size, used in the solution table.
+   State is never colour alone (dec. 16) - the letter is the identity channel. ---- */
+.fl-mini {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 17px; height: 17px; border-radius: var(--r-1);
+  font: 800 var(--fs-2xs)/1 var(--font-mono);
+  vertical-align: -3px;
+}
+.fl-Red { background: var(--coat-r); color: var(--coat-r-ink); }
+.fl-Blue { background: var(--coat-b); color: var(--coat-b-ink); }
+.fl-Green { background: var(--coat-g); color: var(--coat-g-ink); }
+.fl-Purple { background: var(--coat-p); color: var(--coat-p-ink); }
+
+/* ---- section heading: caps label + a rule that runs to the edge ---- */
+.h3 {
+  display: flex; align-items: center; gap: var(--sp-3);
+  font: 700 var(--fs-2xs)/1 var(--font-mono);
+  letter-spacing: var(--ls-caps); text-transform: uppercase;
+  color: var(--ink-3);
+}
+.h3::after { content: ""; flex: 1; height: 1px; background: var(--rule); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}

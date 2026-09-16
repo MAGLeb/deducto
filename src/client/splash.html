@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Deducto</title>
+<link rel="stylesheet" href="./splash.css">
+</head>
+<body>
+<main class="splash">
+  <div class="card">
+    <div class="top">
+      <div class="head">
+        <div class="wordmark">Deducto</div>
+        <div class="cno" id="case-no">Today's case</div>
+        <h1 class="ctitle" id="case-title">A new deduction case</h1>
+      </div>
+      <!-- The tier stamp, alone again. A rank plate stood under it for one version, and it became a
+           duplicate the moment the player's own block started naming the rank as part of a run and
+           a target: "отсутствие визуального дублирования заголовков". The corner belongs to the
+           CASE; who the reader is belongs with the figure that earned it. -->
+      <span class="stamp tier lg" id="tier"></span>
+    </div>
+
+    <!-- Outside `.top`, so it gets the full width of the card: the stamp only has to clear the
+         title, not the paragraph. The same sentence the board carries under the grid - one rule,
+         worded once, so a player who reads it in the feed meets it again where it applies. It is
+         ONE sentence because the 320px feed slot is the size this screen is really built for,
+         and an instruction that has to be clamped there ends in an ellipsis.
+
+         The second line is what THIS case will ask of you - the sentence the tier stamp used to
+         try to carry in 14 characters (dec. 86/90). A cover page is where it belongs: it is read
+         once, while deciding whether to open the file, and it is exactly the content the wide
+         layout's left column had nothing to put in the space it had. -->
+    <!-- The brief carries the world the docket cannot, and which world that is depends on the
+         player's state: the case's own rules while you still have it to solve, and what the vote
+         is doing to the NEXT case once you have closed it (docs/11-stats-ia.md §4.1). -->
+    <div class="brief">
+      <div class="rules" id="rules">Cross out what the clues rule out - the last one left in a cell
+        is the answer.</div>
+      <div class="tierline" id="tier-line"></div>
+      <!-- The four items this case runs on. They are the fastest thing on the card to read - no
+           language, no figure - and they are the one part of the puzzle that is genuinely
+           different every day, which is the complaint plans/07-variety.md is about. Empty and
+           hidden once the case is closed: they are the case's contents, not its result. -->
+      <p class="items" id="items" aria-hidden="true"></p>
+    </div>
+
+    <!-- The docket: what the file already knows, and the middle of the slot it used to leave
+         empty. Every figure here comes from GET /api/preview and none of it is invented - a
+         fact with no number is simply not printed (dec. 37). The first cell is the board
+         itself, twelve countable squares, so the feed shows what the game IS before anyone
+         has pressed anything. -->
+    <div class="docket" id="docket"></div>
+
+    <!-- Two buttons, and only two: the case, and the table (dec. 98). The standings used to be
+         reachable only by opening a case and finding an icon in the board's control rail, which
+         the owner met as "you can't bloody get to it". Still exactly ONE filled button - the
+         second is a secondary, and it is sized to its label rather than to half the row, so the
+         weight on this screen still says which of the two the card is for. -->
+    <div class="cta">
+      <button class="btn primary" id="play">
+        <span id="play-label">Play</span>
+        <span class="sub" id="play-sub" hidden></span>
+      </button>
+      <button class="btn secondary" id="standings">Standings</button>
+    </div>
+  </div>
+</main>
+<script type="module" src="./splash.ts"></script>
+</body>
+</html>

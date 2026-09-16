@@ -1,0 +1,122 @@
+/* The ruled ledger: one implementation of a standings table, two places it appears.
+     - index.html   - the in-game standings screen, reachable before you have solved anything;
+     - index.html   - the standings block on the result sheet.
+   Only the frame around it differs (a full screen, a section of the result sheet);
+   the rows, the tab rail and the pinned "you" line are this file, once.
+
+   D3 "Manila": achromatic throughout - no coloured row, no medal. Your row is a --groove
+   background, an inset ink bar and a printed tag: three non-colour channels for one fact.
+   Values come from tokens.css only; import base.css before this file. */
+
+/* ---- tabs: mono caps with a 2px ink underline on the selected one (spec 4.9) ---- */
+.tabs {
+  flex: 0 0 auto;
+  display: flex; gap: var(--sp-4);
+  border-bottom: 1px solid var(--rule-strong);
+}
+.tabs button {
+  padding: var(--sp-2) 0 6px; margin-bottom: -1px;
+  font: 700 var(--fs-2xs)/1 var(--font-mono);
+  letter-spacing: var(--ls-caps); text-transform: uppercase; color: var(--ink-3);
+  border-bottom: 2px solid transparent;
+}
+.tabs button.on { color: var(--ink); border-bottom-color: var(--ink); }
+/* the selected tab answers to the pointer too - it is still a button, and a rail where
+   three of four items react and one does not reads as a broken control (dec. 73) */
+@media (hover: hover) {
+  .tabs button:hover:not(.on) { color: var(--ink); border-bottom-color: var(--rule-strong); }
+  .tabs button.on:hover { color: var(--ink-2); border-bottom-color: var(--ink-2); }
+}
+
+/* ---- rows ----
+   The ROW is full-bleed and its text is inset, never the other way round. `--row-pad` is set by
+   whichever list is drawing the rows (game.css: 12px on the standings screen, 4px on the result
+   sheet) and it lives INSIDE the row, so the three things the row draws about itself - the fill,
+   the hairline under it and the inset ink bar - all run to the panel's own edges. Carrying that
+   inset as padding on the LIST instead is what stopped the "you" fill 12px short of the edge,
+   landing it on the last glyph of the figure while every band above it (the meta strip, the tab
+   rail's rule) went full width. */
+.b-row {
+  flex: 0 0 auto;
+  display: flex; align-items: center; gap: var(--sp-2);
+  height: clamp(26px, 4.4vh, 36px);
+  padding: 0 var(--row-pad, 0);
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+  border-bottom: 1px solid var(--rule);
+}
+.b-row:last-child { border-bottom: none; }
+
+.b-rank {
+  flex: 0 0 auto; width: 26px; text-align: right;
+  color: var(--ink-3); font-family: var(--font-mono);
+}
+/* the podium is weight and position, never a medal glyph (dec. 70) */
+.b-row.top .b-rank { color: var(--ink); font-weight: 700; }
+.b-name {
+  flex: 1 1 auto; min-width: 0;
+  display: flex; align-items: center; gap: 6px;
+  overflow: hidden; white-space: nowrap;
+  color: var(--ink); font-weight: 600;
+}
+.b-name .tag { flex: 0 0 auto; }
+.b-name .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.b-tag {
+  flex: 0 0 auto;
+  font: 600 var(--fs-2xs)/1 var(--font-mono);
+  letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3);
+  white-space: nowrap;
+}
+.b-flag { flex: 0 0 auto; }
+.b-val {
+  flex: 0 0 auto; min-width: 4.5em; text-align: right;
+  color: var(--ink); font-weight: 700; font-family: var(--font-mono);
+}
+.b-val .u { font-size: var(--fs-2xs); font-weight: 600; color: var(--ink-3); margin-left: 2px; }
+
+/* your row: groove + an inset ink bar + a printed tag - three non-colour channels, never a hue.
+   The bar is drawn on the row's own left edge and the rank clears it on `--row-pad`; the fill
+   spans the whole row, which is the width of the list. */
+.b-row.you { background: var(--groove); box-shadow: inset 3px 0 0 var(--ink); }
+.b-row.you .b-rank { color: var(--ink); font-weight: 700; }
+
+.b-empty {
+  margin: auto; text-align: center; color: var(--ink-3);
+  font-size: var(--fs-sm); padding: var(--sp-3);
+}
+
+/* ---- the pinned "you" row: always visible, even at rank 340 ---- */
+.b-you {
+  flex: 0 0 auto;
+  display: flex; align-items: center; gap: var(--sp-2);
+  padding: var(--sp-1) var(--sp-2);
+  min-height: clamp(28px, 4.6vh, 38px);
+  border: 1px solid var(--rule-strong);
+  background: var(--sheet-raised);
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+}
+.b-you[hidden] { display: none; }
+/* Inside the pinned box the row is not one of a table's bands - the box IS the band, and it
+   carries its own padding and border. So the row gives back both the inset and the fill. */
+.b-you .b-row { --row-pad: 0; flex: 1 1 auto; min-width: 0; height: auto; border-bottom: none; background: none; box-shadow: none; }
+.b-you > .b-tag { flex: 0 0 auto; }
+.b-you.b-you-empty { justify-content: center; color: var(--ink-3); font-size: var(--fs-xs); }
+
+/* ---- a list that scrolls inside its own box ----
+   The page never scrolls (base.css pins html/body); a standings list is the one thing that
+   is legitimately longer than its slot, so it gets its own scroller and contains the chain
+   so a flick at the end of the list cannot start scrolling anything behind it. */
+.led-scroll {
+  flex: 1 1 auto; min-height: 0;
+  overflow-y: auto; overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+/* Sentence-case sans, not mono caps: it is a caption about the table, and 11px caps is the dress
+   this system reserves for labels. It wraps rather than ellipsing - "scores settle overnight" is
+   the half that got cut, and it is the half worth reading (dec. 83). */
+.led-note {
+  flex: 1 1 auto; min-width: 0;
+  font: 400 var(--fs-xs)/1.35 var(--font-sans);
+  color: var(--ink-3);
+}

@@ -2,400 +2,333 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Deducto</title>
-<style>
-  /* ============ design tokens (docs/10-design-spec.md) ============ */
-  :root {
-    color-scheme: dark;
-    --surface-0: #0b101e; --surface-1: #131a2e; --surface-2: #1a2340;
-    --surface-3: #1f2846; --surface-sunken: #10162a;
-    --text: #e8ebf5; --text-2: #c6cbdc; --muted: #8b93ab; --on-accent: #0b101e;
-    --border: #26304f; --border-strong: #39466e; --border-active: #6b76a0; --border-hover: #5f70ad;
-    --orange: #ff8c42; --orange-dim: #b35a20; --green: #35c46f; --red: #ff5a5f;
-    --strike: #6b7590; --blue: #4f9cff; --purple: #a78bfa; --yellow: #ffd166;
-    --hint-bg: #241d10; --ok-bg: #123524; --ok-border: #1f6b40;
-    --err-bg: #241012; --err-border: #5e2326; --info-bg: #10223a;
-    --flair-r: #D55E00; --flair-b: #56B4E9; --flair-g: #009E73; --flair-p: #CC79A7;
-    --fs-2xs: 11px; --fs-xs: 12px; --fs-sm: 13px; --fs-base: 14px;
-    --fs-md: 17px; --fs-lg: 20px; --fs-xl: 24px; --fs-2xl: 28px;
-    --r-s: 8px; --r-m: 12px; --r-l: 16px; --r-pill: 999px;
-  }
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { background: var(--surface-0); color: var(--text); font-family: -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
-  body { display: flex; justify-content: center; padding: 16px 8px; min-height: 100vh; font-size: var(--fs-sm); line-height: 1.45; overflow-x: hidden; }
-  body.modal-open { overflow: hidden; }
-  button, input { font-family: inherit; }
-  button { touch-action: manipulation; }
-  :focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
-  .app { width: 100%; max-width: 700px; }
-
-  .hud { display: flex; gap: 6px; margin-left: auto; }
-  .chip { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-s); padding: 3px 8px; font-size: var(--fs-xs); font-variant-numeric: tabular-nums; color: var(--text); display: flex; align-items: center; gap: 5px; white-space: nowrap; }
-  .chip b { font-weight: 700; }
-  .chip-prog b { color: var(--orange); }
-  .chip-time b { color: var(--muted); font-weight: 600; }
-  .chip-streak b { color: var(--orange); }
-
-  .board { background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--r-l); overflow: hidden; box-shadow: 0 14px 44px rgba(0,0,0,.45); display: flex; flex-direction: column; }
-  @media (min-width: 640px) { .board { height: min(512px, calc(100vh - 16px)); } }
-  .casebar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--border); background: linear-gradient(180deg, #182140, var(--surface-1)); }
-  .casebar .case-no { color: var(--orange); font-weight: 800; font-size: var(--fs-sm); white-space: nowrap; }
-  .casebar .case-title { font-weight: 700; font-size: var(--fs-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-  .tier-badge { font-size: var(--fs-2xs); white-space: nowrap; }
-
-  .epilogue { padding: 3px 12px; font-size: var(--fs-2xs); color: var(--muted); border-bottom: 1px solid var(--border); background: var(--surface-sunken); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .epilogue:empty { display: none; }
-  .epilogue b { color: var(--text-2); font-weight: 600; }
-
-  .main { display: flex; flex: 1; min-height: 0; }
-
-  .clue-panel { width: clamp(210px, 31%, 240px); flex-shrink: 0; border-right: 1px solid var(--border); display: flex; flex-direction: column; background: var(--surface-sunken); }
-  .clue-head { padding: 6px 12px 4px; font-size: var(--fs-2xs); text-transform: uppercase; letter-spacing: 1px; color: var(--muted); font-weight: 700; }
-  /* unified notice banner - floats over the top of the board, so it never shifts the grid */
-  .notice { display: none; position: absolute; top: 4px; left: 12px; right: 12px; z-index: 5; padding: 7px 11px; font-size: var(--fs-sm); line-height: 1.4; border: 1px solid var(--border); border-radius: var(--r-s); box-shadow: 0 6px 18px rgba(0,0,0,.45); max-height: 190px; overflow-y: auto; }
-  .notice.show { display: block; animation: hintin .25s ease-out; }
-  @keyframes hintin { from { opacity: 0; transform: translateY(-4px); } }
-  .notice .notice-tag { font-size: var(--fs-2xs); text-transform: uppercase; letter-spacing: 1px; font-weight: 700; opacity: .85; margin-bottom: 2px; }
-  .notice #notice-text > div { padding: 0; }
-  .notice-x { position: absolute; top: 3px; right: 6px; background: transparent; border: none; color: inherit; opacity: .55; font-size: 13px; cursor: pointer; line-height: 1; padding: 2px; }
-  .notice-x:hover { opacity: 1; }
-  /* compact 2-row hint banner: header (count + pager), then body (hint text + Reveal button on the right) */
-  .hint-head { display: flex; align-items: center; gap: 10px; padding-right: 16px; margin-bottom: 4px; }
-  .hint-count { font-size: var(--fs-2xs); text-transform: uppercase; letter-spacing: 1px; font-weight: 700; opacity: .85; }
-  .hint-pager { display: flex; gap: 4px; }
-  .hint-pager button { background: transparent; border: 1px solid color-mix(in srgb, var(--yellow) 40%, transparent); color: var(--yellow); border-radius: var(--r-s); padding: 0 8px; font-size: var(--fs-md); font-weight: 700; cursor: pointer; line-height: 1.3; }
-  .hint-pager button:disabled { opacity: .35; cursor: default; }
-  .hint-body { display: flex; align-items: center; gap: 10px; }
-  .hint-line { flex: 1; min-width: 0; font-weight: 600; }
-  .hint-reveal { flex-shrink: 0; background: color-mix(in srgb, var(--yellow) 16%, transparent); border: 1px solid color-mix(in srgb, var(--yellow) 45%, transparent); color: var(--yellow); border-radius: var(--r-s); padding: 5px 10px; font-size: var(--fs-xs); font-weight: 700; cursor: pointer; white-space: nowrap; }
-  .hint-reveal:hover:not(:disabled) { background: color-mix(in srgb, var(--yellow) 26%, transparent); }
-  .hint-reveal:disabled { opacity: .5; cursor: default; }
-  .notice.k-hint { background: var(--hint-bg); color: var(--yellow); border-color: color-mix(in srgb, var(--yellow) 30%, var(--surface-1)); }
-  .notice.k-info { background: var(--info-bg); color: var(--blue); border-color: #234a72; }
-  .notice.k-ok  { background: var(--ok-bg); color: var(--green); border-color: var(--ok-border); }
-  .notice.k-err { background: var(--err-bg); color: var(--red); border-color: var(--err-border); }
-
-  .clue-list { overflow-y: auto; flex: 1; padding: 4px 0 8px; scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
-  .clue-list.fade-b { mask-image: linear-gradient(180deg, #000 calc(100% - 20px), transparent); -webkit-mask-image: linear-gradient(180deg, #000 calc(100% - 20px), transparent); }
-  /* mobile clue slider: one clue at a time (only red+gray), with a green/red/gray tally */
-  .clue-slider { display: none; padding: 6px 12px 8px; }
-  .cs-head { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
-  .cs-title { font-size: var(--fs-2xs); text-transform: uppercase; letter-spacing: 1px; color: var(--muted); font-weight: 700; }
-  .cs-stats { font-size: var(--fs-2xs); font-variant-numeric: tabular-nums; color: var(--text-2); }
-  .cs-pager { margin-left: auto; display: flex; align-items: center; gap: 6px; }
-  .cs-pager button { background: transparent; border: 1px solid var(--border-strong); color: var(--text-2); border-radius: var(--r-s); padding: 0 9px; font-size: var(--fs-md); font-weight: 700; cursor: pointer; line-height: 1.3; }
-  .cs-pager button:disabled { opacity: .35; cursor: default; }
-  .cs-pos { font-size: var(--fs-2xs); color: var(--muted); font-variant-numeric: tabular-nums; min-width: 26px; text-align: center; }
-  .cs-clue { display: flex; gap: 8px; font-size: var(--fs-sm); line-height: 1.4; color: var(--text-2); align-items: flex-start; min-height: 38px; }
-  .cs-clue .num { flex-shrink: 0; width: 18px; height: 18px; border-radius: var(--r-pill); border: 1px solid var(--border-strong); font-size: 11px; display: flex; align-items: center; justify-content: center; color: var(--muted); margin-top: 1px; font-variant-numeric: tabular-nums; }
-  .cs-clue.st-bad { color: var(--text); }
-  .cs-clue.st-bad .num { background: var(--red); border-color: var(--red); color: var(--on-accent); font-weight: 800; }
-  .cs-clue.cs-done { color: var(--green); font-weight: 600; justify-content: center; align-items: center; }
-  .clue-item { display: flex; gap: 6px; padding: 3px 10px 3px 8px; font-size: var(--fs-xs); line-height: 1.35; color: var(--text-2); border-left: 3px solid transparent; }
-  .clue-item.st-ok .txt { opacity: .68; text-decoration: line-through; text-decoration-color: var(--muted); text-decoration-thickness: 1px; }
-  .clue-item.st-bad { border-left-color: var(--red); background: rgba(255,90,95,.06); }
-  .clue-item .num { flex-shrink: 0; width: 16px; height: 16px; border-radius: var(--r-pill); border: 1px solid var(--border-strong); font-size: 10px; display: flex; align-items: center; justify-content: center; color: var(--muted); margin-top: 1px; font-variant-numeric: tabular-nums; }
-  .clue-item.st-ok .num { background: var(--green); border-color: var(--green); color: var(--on-accent); }
-  .clue-item.st-bad .num { background: var(--red); border-color: var(--red); color: var(--on-accent); font-weight: 800; }
-
-  .grid-area { flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 8px 12px; min-width: 0; position: relative; }
-  .bcell { height: 44px; border-radius: var(--r-s); background: var(--surface-2); border: 1px solid var(--border-strong); display: flex; align-items: center; justify-content: center; gap: 3px; padding: 2px 4px; }
-  .chip-m { width: 24px; height: 24px; border-radius: 6px; position: relative; display: inline-flex; align-items: center; justify-content: center; font-size: var(--fs-xs); cursor: pointer; background: #202a4c; border: 1px solid transparent; color: var(--text-2); font-weight: 600; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: manipulation; transition: border-color .1s, transform .06s; }
-  .chip-m .g { pointer-events: none; }
-  .chip-m::before { content: ""; position: absolute; inset: -8px -3px; }
-  .chip-m:hover { border-color: var(--border-hover); }
-  .chip-m:active { transform: scale(.9); }
-  .chip-m.fl { color: var(--on-accent); font-weight: 800; font-size: var(--fs-xs); }
-  .chip-m.fl-Red { background: var(--flair-r); } .chip-m.fl-Blue { background: var(--flair-b); }
-  .chip-m.fl-Green { background: var(--flair-g); } .chip-m.fl-Purple { background: var(--flair-p); }
-  /* crossed out = clearly "off": desaturated, dim content, thick strike */
-  .chip-m.crossed { background: #141a2c; border-color: transparent; }
-  .chip-m.crossed .g { opacity: .38; }
-  .chip-m.fl-Red.crossed { background: color-mix(in srgb, #D55E00 15%, #10152a); }
-  .chip-m.fl-Blue.crossed { background: color-mix(in srgb, #56B4E9 15%, #10152a); }
-  .chip-m.fl-Green.crossed { background: color-mix(in srgb, #009E73 15%, #10152a); }
-  .chip-m.fl-Purple.crossed { background: color-mix(in srgb, #CC79A7 15%, #10152a); }
-  .chip-m.fl.crossed .g { opacity: .5; color: var(--muted); }
-  .chip-m.crossed::after { content: ""; position: absolute; left: 2px; right: 2px; top: 50%; height: 3px; background: #8e99b6; transform: translateY(-50%) rotate(-45deg); border-radius: 2px; }
-  .chip-m.fl.crossed::after { background: #c6cddd; }
-  /* the sole remaining candidate = the deduced answer: green ring AROUND the chip
-     (outer ring, no fill - keeps the coat color fully visible) */
-  .chip-m.confirmed { box-shadow: 0 0 0 2px var(--green), 0 0 8px rgba(53,196,111,.5); }
-  .grid th.rowh .done-mark { color: var(--green); }
-
-  .grid-wrap { display: flex; align-items: flex-start; justify-content: flex-start; overflow-x: auto; scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
-  .grid-wrap::-webkit-scrollbar { height: 6px; }
-  .grid-wrap::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
-  .grid-wrap.fade-r { mask-image: linear-gradient(90deg, #000 calc(100% - 24px), transparent); -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 24px), transparent); }
-  table.grid { border-collapse: separate; border-spacing: 4px; margin: 0 auto; }
-  .grid th { font-size: var(--fs-xs); font-weight: 600; color: var(--muted); }
-  .grid th.colh { padding-bottom: 4px; min-width: 62px; }
-  .grid th.rowh { text-align: right; padding-right: 12px; font-size: var(--fs-sm); color: var(--text); font-weight: 600; position: sticky; left: 0; background: var(--surface-1); z-index: 2; }
-  .grid th.corner { position: sticky; left: 0; background: var(--surface-1); z-index: 3; }
-
-  .fl-mini { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: var(--r-pill); font-size: 11px; font-weight: 800; color: var(--on-accent); vertical-align: -3px; }
-  .fl-mini.fl-Red { background: var(--flair-r); } .fl-mini.fl-Blue { background: var(--flair-b); }
-  .fl-mini.fl-Green { background: var(--flair-g); } .fl-mini.fl-Purple { background: var(--flair-p); }
-  @keyframes pop { 50% { transform: scale(1.18); } }
-
-  .gridn { width: 100%; max-width: 420px; margin: 0 auto; display: none; }
-  .gridn-cols { display: flex; gap: 6px; padding-bottom: 2px; }
-  .gridn-cols span { flex: 1; text-align: center; font-size: var(--fs-2xs); color: var(--muted); font-weight: 600; }
-  .nrow { margin-bottom: 6px; }
-  .nname { font-size: var(--fs-xs); font-weight: 600; color: var(--text); padding: 0 2px 2px; }
-  .nname .done-mark { color: var(--green); }
-  .ncells { display: flex; gap: 6px; }
-  .ncells .bcell { flex: 1; min-width: 0; height: 42px; }
-
-  .controls { display: flex; gap: 6px; padding: 8px 12px; border-top: 1px solid var(--border); background: var(--surface-sunken); }
-  .btn { flex: 1; min-height: 44px; padding: 8px; border-radius: var(--r-m); border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-size: var(--fs-base); font-weight: 600; cursor: pointer; transition: filter .1s, transform .05s, background .15s, color .15s; }
-  .btn.icon { flex: 0 0 44px; padding: 4px; font-size: var(--fs-md); font-weight: 700; }
-  #btn-results { flex: 1.4; }
-  .btn:hover { filter: brightness(1.15); }
-  .btn:active { transform: scale(.98); }
-  .btn.primary { background: var(--orange); border-color: var(--orange); color: var(--on-accent); font-weight: 800; }
-  .btn.secondary { background: var(--surface-2); border-color: var(--border-active); }
-  .btn.ghost { background: transparent; border-color: transparent; color: var(--muted); }
-  .btn.ghost:hover { background: var(--surface-2); color: var(--text); filter: none; }
-  .btn.warn:hover { border-color: var(--red); color: var(--red); background: transparent; }
-
-  .bcell.solved { border-color: rgba(53,196,111,.45); }
-  .just-solved .bcell { animation: rowglow .9s ease-out; }
-  @keyframes rowglow { 30% { box-shadow: 0 0 14px rgba(53,196,111,.6); border-color: var(--green); } }
-  .done-mark { display: inline-block; animation: pop .3s; }
-
-  .toast { position: fixed; left: 50%; bottom: 32px; transform: translateX(-50%) translateY(20px); background: var(--err-bg); color: var(--red); border: 1px solid var(--err-border); padding: 8px 16px; border-radius: var(--r-m); font-size: var(--fs-base); font-weight: 600; opacity: 0; pointer-events: none; transition: all .25s; z-index: 60; max-width: calc(100vw - 24px); }
-  .toast.info { background: var(--info-bg); color: var(--blue); border-color: #234a72; }
-  .toast.ok { background: var(--ok-bg); color: var(--green); border-color: var(--ok-border); }
-  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-  body.modal-open .toast { background: #fdecec; color: #b42328; border-color: #f3c2c4; }
-  body.modal-open .toast.info { background: #e8f1fd; color: #1d4ed8; border-color: #c4d9f6; }
-  body.modal-open .toast.ok { background: #e7f6ed; color: #147a43; border-color: #b7e0c6; }
-
-  /* onboarding: 3 coach marks over the real case */
-  .coach { position: fixed; inset: 0; z-index: 80; display: none; }
-  .coach.show { display: block; }
-  .coach-ring { position: absolute; border: 2px solid var(--orange); border-radius: var(--r-m); box-shadow: 0 0 0 100vmax rgba(5,8,16,.72); transition: all .25s ease-out; pointer-events: none; }
-  .coach-tip { position: absolute; max-width: 260px; background: var(--surface-3); color: var(--text); border: 1px solid var(--border-active); border-radius: var(--r-m); padding: 10px 12px; font-size: var(--fs-sm); line-height: 1.45; box-shadow: 0 12px 34px rgba(0,0,0,.5); }
-  .coach-tip .coach-step { color: var(--muted); font-size: var(--fs-2xs); font-weight: 700; letter-spacing: .5px; }
-  .coach-tip .coach-btns { display: flex; gap: 6px; margin-top: 8px; justify-content: flex-end; }
-  .coach-tip button { border: 1px solid var(--border); background: var(--surface-2); color: var(--text); border-radius: var(--r-s); padding: 5px 12px; font-size: var(--fs-xs); font-weight: 600; cursor: pointer; }
-  .coach-tip button.primary { background: var(--orange); border-color: var(--orange); color: var(--on-accent); font-weight: 800; }
-  .coach-tip button.ghost { background: transparent; border-color: transparent; color: var(--muted); }
-
-  /* solved overlay: LIGHT result card over the dark game */
-  .overlay { display: none; position: fixed; inset: 0; z-index: 50; background: rgba(5,8,16,.87); backdrop-filter: blur(3px); align-items: flex-start; justify-content: center; overflow-y: auto; padding: 20px 8px; overscroll-behavior: contain; }
-  .overlay.show { display: flex; animation: ovfade .5s ease-out; }
-  @keyframes ovfade { from { opacity: 0; } }
-  .result { --surface-1: #ffffff; --surface-2: #f2f4f9; --surface-3: #ffffff; --surface-sunken: #eef1f6; --text: #1c2437; --text-2: #3c4660; --muted: #5f6b84; --border: #e2e6ef; --border-strong: #c9d1e0; --border-active: #a9b4cc; --border-hover: #8e9cbd; --green: #147a43; --red: #c22f36; --orange: #c2410c; --purple: #6b4fc7; --blue: #2563eb; position: relative; width: 100%; max-width: 640px; background: #ffffff; color: var(--text); border-radius: var(--r-l); padding: 11px 16px 9px; animation: rise .55s ease-out; box-shadow: 0 24px 70px rgba(0,0,0,.65); }
-  @keyframes rise { from { opacity: 0; transform: translateY(24px); } }
-  .result .btn.primary { background: #ff8c42; border-color: #d9631e; color: #0b101e; }
-  .result .btn { min-height: 32px; font-size: var(--fs-sm); }
-  .result .btn:hover { filter: brightness(.96); }
-  .r-close { position: absolute; top: 8px; right: 8px; z-index: 2; width: 32px; height: 32px; border-radius: var(--r-s); background: transparent; border: none; color: var(--muted); font-size: 18px; cursor: pointer; line-height: 1; }
-  .r-close:hover { background: var(--surface-2); color: var(--text); }
-  .result h2 { font-size: var(--fs-xl); font-weight: 800; letter-spacing: -.3px; text-align: center; margin-bottom: 1px; }
-  .result h2 span { color: var(--green); }
-  .hero { text-align: center; margin: 3px 0 0; }
-  .hero .time { font-size: var(--fs-2xl); font-weight: 800; animation: pop .3s .2s backwards; }
-  .hero .pct { font-size: var(--fs-md); font-weight: 700; color: var(--green); margin-top: 2px; }
-  .statrow { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin: 6px 0 0; }
-  .stat { display: inline-flex; align-items: center; gap: 5px; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-pill); padding: 3px 11px; font-size: var(--fs-xs); color: var(--text-2); }
-  .stat .ic { font-size: 13px; line-height: 1; }
-  .stat b { color: var(--text); font-weight: 800; font-variant-numeric: tabular-nums; }
-  .stat .nx { color: var(--muted); font-size: var(--fs-2xs); margin-left: 3px; }
-
-  .hist-block { margin-top: 6px; }
-  .hist-cap { text-align: center; color: var(--text-2); font-size: var(--fs-sm); font-weight: 600; margin-bottom: 3px; }
-  .hist { display: flex; align-items: flex-end; gap: 7px; height: 84px; padding: 0 6px; }
-  .hist .bin { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; min-width: 0; }
-  .hist .bar { width: 100%; max-width: 32px; border-radius: 5px 5px 2px 2px; background: linear-gradient(180deg, #4cc47d, #2f9d57); min-height: 4px; box-shadow: inset 0 1px 0 rgba(255,255,255,.18); }
-  .hist .bin.you .bar { background: linear-gradient(180deg, #ff9d57, #df6a1e); }
-  .hist .cnt { font-size: 10px; color: var(--muted); margin-bottom: 3px; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .hist .bin.you .cnt { color: var(--text); font-weight: 800; }
-  .hist-x { display: flex; gap: 7px; padding: 0 6px; border-top: 1px solid var(--border); }
-  .hist-x .lbl { flex: 1; text-align: center; font-size: 11px; color: var(--muted); padding-top: 4px; min-width: 0; white-space: nowrap; }
-  .hist-x .lbl.you { color: var(--text); font-weight: 700; }
-  .hist-x .lbl .you-tag { display: block; color: var(--orange); font-weight: 800; font-size: 10px; margin-top: 1px; }
-
-  .result h3, .result summary.h3 { font-size: var(--fs-2xs); text-transform: uppercase; letter-spacing: 1.2px; color: var(--muted); margin: 6px 0 3px; display: flex; align-items: center; gap: 10px; font-weight: 700; }
-  .result h3::after, .result summary.h3::after { content: ""; flex: 1; height: 1px; background: var(--border); }
-  .result summary.h3 { cursor: pointer; list-style: none; color: var(--text-2); }
-  .result summary.h3:hover { color: var(--text); }
-  .result summary.h3::-webkit-details-marker { display: none; }
-  .result summary.h3::before { content: "▸"; color: var(--muted); }
-  .result details[open] summary.h3::before { content: "▾"; }
-  .result .sum-hint { color: var(--muted); text-transform: none; letter-spacing: 0; font-weight: 400; }
-  .result details[open] .sum-hint { display: none; }
-
-  table.final { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
-  .final th, .final td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); }
-  .final th { color: var(--muted); font-size: var(--fs-2xs); text-transform: uppercase; letter-spacing: .5px; }
-  .final td { color: var(--text-2); white-space: nowrap; }
-  .final td:first-child { font-weight: 700; color: var(--text); }
-
-  /* mini leaderboard (top-3 of the day) */
-  .lb-mini { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-s); padding: 3px 10px; font-size: var(--fs-sm); }
-  .lb-row { display: flex; align-items: center; gap: 8px; padding: 3px 0; font-variant-numeric: tabular-nums; }
-  .lb-row .lb-rank { width: 20px; text-align: center; flex-shrink: 0; }
-  .lb-row .lb-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); }
-  .lb-row .lb-time { color: var(--text-2); font-weight: 600; flex-shrink: 0; }
-  .lb-row.you .lb-name, .lb-row.you .lb-time, .lb-row.you .lb-rank { color: var(--text); font-weight: 800; }
-  .lb-me { border-top: 1px solid var(--border); margin-top: 2px; padding-top: 3px; color: var(--muted); font-size: var(--fs-xs); display: flex; gap: 8px; }
-  .lb-me b { color: var(--text-2); font-weight: 700; }
-  .lb-me .lb-time { margin-left: auto; }
-  .lb-empty { color: var(--muted); padding: 3px 0; }
-  .lb-cap { color: var(--muted); font-size: var(--fs-2xs); padding: 2px 0 2px; border-bottom: 1px solid var(--border); margin-bottom: 1px; }
-
-  .vote-row { display: flex; gap: 6px; }
-  .vote-row .btn { flex: 1; }
-  .vote-done { font-size: var(--fs-sm); color: var(--text-2); text-align: center; padding: 4px 0; }
-  .vote-done b { color: var(--text); }
-  .envelope { margin-top: 5px; border: 1px dashed var(--border-active); border-radius: var(--r-s); background: var(--surface-2); padding: 5px 9px; text-align: center; }
-  .envelope .env-top { font-weight: 700; font-size: var(--fs-base); }
-  .envelope .env-seal { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: var(--r-pill); background: var(--surface-sunken); border: 1px solid var(--border); font-size: var(--fs-2xs); font-weight: 700; letter-spacing: 1px; color: var(--muted); vertical-align: 2px; }
-  .votebar { margin-top: 5px; }
-  .vb-track { display: flex; height: 15px; border-radius: var(--r-pill); overflow: hidden; background: var(--surface-sunken); border: 1px solid var(--border); }
-  .vb-seg { display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 800; color: #fff; min-width: 0; overflow: hidden; white-space: nowrap; transition: width .4s ease; }
-  .vb-seg.harder { background: #d9631e; }
-  .vb-seg.same { background: #6b7590; }
-  .vb-seg.softer { background: #147a43; }
-  .vb-seg.empty { background: var(--border); }
-  .vb-legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 3px 12px; margin-top: 3px; font-size: var(--fs-2xs); color: var(--muted); }
-  .vb-legend .vb-l b { color: var(--text-2); font-weight: 700; }
-  .vb-legend .vb-l.win b { color: var(--orange); }
-  .envelope .env-tier { margin-top: 2px; font-size: var(--fs-sm); color: var(--text-2); }
-  .envelope .env-tier b { color: var(--orange); }
-  .next-case { margin-top: 2px; color: var(--muted); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; }
-
-  .xtra { display: flex; gap: 6px; margin-top: 6px; }
-  .xtra .btn { flex: 1; min-height: 32px; white-space: nowrap; padding: 4px 8px; }
-
-  .confetti { position: absolute; inset: 0; overflow: hidden; pointer-events: none; border-radius: inherit; }
-  .confetti i { position: absolute; top: -12px; width: 7px; height: 11px; border-radius: 2px; opacity: 0; animation: cfall 1.4s ease-in forwards; }
-  @keyframes cfall { 0% { opacity: 1; transform: translateY(0) rotate(0); } 100% { opacity: 0; transform: translateY(260px) rotate(320deg); } }
-  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
-
-  .loading { padding: 40px; text-align: center; color: var(--muted); }
-
-  @media (pointer: coarse) { .clue-item { padding: 8px 12px; min-height: 44px; align-items: center; } }
-  @media (max-width: 639px) {
-    body { padding: 6px 4px; } .board { height: auto; } .casebar { padding: 6px 10px; }
-    .chip { padding: 2px 6px; }
-    .main { flex-direction: column; } .clue-panel { width: 100%; border-right: none; border-bottom: 1px solid var(--border); }
-    .clue-head { display: none; } .clue-list { display: none; } .clue-slider { display: block; }
-    .grid-area { padding: 8px; } .grid th.colh { min-width: 52px; width: 52px; }
-    .controls { padding: 6px 8px calc(6px + env(safe-area-inset-bottom)); }
-    .btn { white-space: nowrap; font-size: var(--fs-sm); }
-    #btn-hint { flex: 0 0 44px; padding: 4px; } #btn-hint .btxt { display: none; }
-    .toast { bottom: 70px; } body.modal-open .toast { bottom: 12px; }
-    .result { padding: 14px 10px 10px; }
-    .hist { padding: 0 2px; gap: 5px; } .hist-x { padding: 0 2px; gap: 5px; }
-    .final td, .final th { padding: 6px 6px; font-size: var(--fs-xs); }
-    .coach-tip { max-width: calc(100vw - 32px); }
-  }
-  @media (max-height: 720px) { .overlay { padding: 8px; } }
-  @media (max-height: 720px) and (max-width: 639px) {
-    body { padding: 4px; } .app { height: calc(100vh - 8px); display: flex; flex-direction: column; }
-    .board { flex: 1; height: auto; min-height: 0; }
-    .main { overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
-    .main::-webkit-scrollbar { width: 6px; } .main::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
-    .clue-list { max-height: 26vh; }
-  }
-</style>
+<link rel="stylesheet" href="./game.css">
 </head>
-<body>
-<div class="app">
-  <div class="board" id="board">
-    <div class="casebar">
-      <span class="case-no" id="case-no">🧵 CASE</span>
-      <span class="case-title" id="case-title">Loading…</span>
-      <span class="tier-badge" id="tier-badge"></span>
-      <div class="hud">
-        <div class="chip chip-streak" id="hud-streak" hidden>🔥 <b id="hud-streak-n">0</b></div>
-        <div class="chip chip-prog">✔ <b id="hud-prog">0/12</b></div>
-        <div class="chip chip-time">⏱️ <b id="hud-time">00:00</b></div>
+<body data-view="load">
+
+<!-- Opening the file. This is the first paint, before /api/daily answers. -->
+<div class="centered" id="view-load">
+  <div class="card">
+    <div class="caps">Opening case file</div>
+    <div class="skel" style="width:62%"></div>
+    <div class="skel" style="width:88%"></div>
+    <div class="skel" style="width:74%"></div>
+    <div class="skel" style="width:40%"></div>
+    <div class="errcode">Fetching clues</div>
+  </div>
+</div>
+
+<!-- The archive did not answer. The one red mark on this screen is the stamp. -->
+<div class="centered" id="view-error">
+  <div class="card">
+    <span class="stamp red lg">File unavailable</span>
+    <p class="errbody">Today's case did not come back from the archive. Your progress is stored on
+      the server - nothing is lost.</p>
+    <button class="btn primary" id="btn-retry">Try again</button>
+    <div class="errcode" id="err-code"></div>
+  </div>
+</div>
+
+<div class="app" id="view-game">
+  <header class="casebar">
+    <span class="case-no" id="case-no">CASE</span>
+    <span class="case-title" id="case-title">Loading…</span>
+    <!-- A word anyone can rank over the denominator an ordinal never had - MEDIUM / LEVEL 2 OF 3
+         (dec. 86). The stamp's weight is the second, non-colour channel. -->
+    <span class="stamp tier" id="tier-badge"></span>
+    <!-- Two meters about THIS CASE, then - past a heavier rule - the one about you (world ③,
+         docs/11-stats-ia.md §4.2). The streak used to sit BETWEEN the two case meters, which is the
+         same interleaving the docket had, in miniature. The bare word `Streak` is reserved
+         product-wide for the run in progress; anything showing the best ever qualifies it. -->
+    <div class="hud">
+      <div class="meter" id="meter-cells">
+        <span class="ticks" id="cell-seg"></span>
+        <span class="meter-v" id="cell-n">00/12</span>
+      </div>
+      <div class="meter">
+        <span class="caps">Time</span><span class="meter-v" id="hud-time">00:00</span>
+      </div>
+      <div class="meter wbreak" id="hud-streak" hidden>
+        <span class="caps">Streak</span><span class="meter-v" id="hud-streak-n">0</span>
       </div>
     </div>
+  </header>
 
-    <div class="epilogue" id="epilogue"></div>
+  <div class="epilogue" id="epilogue"></div>
 
-    <div class="main">
-      <div class="clue-panel">
-        <div class="clue-head">Clues</div>
-        <div class="clue-list" id="clue-list"><div class="loading">Loading case…</div></div>
-        <div class="clue-slider" id="clue-slider"></div>
+  <div class="main">
+    <section class="clue-panel">
+      <div class="cluehead">
+        <span class="caps">Clues</span>
+        <span class="tally" id="clue-tally"></span>
       </div>
-      <div class="grid-area">
-        <div class="notice" id="notice">
-          <button class="notice-x" id="notice-x" title="Dismiss">✕</button>
-          <div class="notice-tag" id="notice-tag"></div>
-          <div id="notice-text"></div>
+      <div class="clue-list" id="clue-list"><div class="loading">Loading case…</div></div>
+    </section>
+
+    <section class="grid-area">
+      <div class="board" id="board"></div>
+      <p class="boardhelp" id="statusline"></p>
+      <!-- The hint slip. It floats OVER the board area and never touches the clue column, which
+           is what the owner asked for and what the in-flow version could not deliver: docked in
+           the clue panel it shrank the list, and at 14 clues it silently ate a clue row at every
+           phone size. `data-anchor` flips it to the far end of the board from the cell the hint
+           is pointing at, so the slip can never cover the one cell it is about. -->
+      <div class="notice" id="notice" data-anchor="bottom">
+        <div class="notice-head">
+          <span class="notice-tag caps" id="notice-tag"></span>
+          <span class="notice-tools" id="notice-tools"></span>
+          <button class="notice-x" id="notice-x" title="Dismiss" aria-label="Dismiss">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+          </button>
         </div>
-        <div class="grid-wrap" id="grid-wrap"><table class="grid" id="grid"></table><div class="gridn" id="gridn"></div></div>
+        <div class="notice-body"><div id="notice-text"></div></div>
       </div>
-    </div>
-
-    <div class="controls">
-      <button class="btn ghost icon warn" id="btn-restart" title="Start over">↺</button>
-      <button class="btn ghost icon" id="btn-undo" title="Undo move">↩</button>
-      <button class="btn ghost icon" id="btn-help" title="How to play">?</button>
-      <button class="btn ghost icon" id="btn-warmup" title="Warm-up: practice the mechanic on an easy case">▷</button>
-      <button class="btn secondary" id="btn-hint">💡<span class="btxt"> Hint</span></button>
-      <button class="btn primary" id="btn-results" hidden>🏆 Results</button>
-    </div>
+    </section>
   </div>
 
+  <!-- The stall nudge is the ONE message that arrives on its own, so it is the one message that
+       looks like an interruption: a bar on the bottom edge, one short line, one action. It is
+       deliberately not the hint slip - four different things speaking in the same voice, in the
+       same place, at the same size is what made the owner ask "is this a hint too?". -->
+  <div class="nudge" id="nudge" hidden>
+    <span class="nudge-txt" id="nudge-text"></span>
+    <button class="btn secondary" id="nudge-go">Show me</button>
+    <button class="nudge-x" id="nudge-x" title="Dismiss" aria-label="Dismiss">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+    </button>
+  </div>
+
+  <footer class="controls">
+    <button class="btn ghost icon" id="btn-undo" title="Undo move" aria-label="Undo move">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg>
+    </button>
+    <button class="btn ghost icon" id="btn-restart" title="Start over" aria-label="Start over">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 5v6h-6"/><path d="M20 11A8 8 0 1 0 18 17"/></svg>
+    </button>
+    <button class="btn ghost icon" id="btn-help" title="How to play" aria-label="How to play">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.2A2.6 2.6 0 0 1 14.6 10c0 1.7-2.6 2.1-2.6 3.8"/><path d="M12 17.2h.01"/></svg>
+    </button>
+    <!-- The standings are open to everyone, solved or not (task 3), and this is the fourth glyph
+         in the icon rail - NOT a named entrance. It used to grow a label above 720px, which made
+         one button in a row of four a different width and shape at exactly the widths where the
+         row has room to show it off; the owner read the result as "хочу кнопки одинаковые".
+         The label was load-bearing when this rail was the only way in - "до него хуй доберешься".
+         It is not any more: dec. 98 put a full-size Standings button on the feed card, which is
+         where a player who has not opened a case yet actually is. -->
+    <button class="btn ghost icon" id="btn-standings" title="Standings" aria-label="Standings">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h4M4 12h9M4 18h6"/><path d="M17 15v5M20.5 11v9"/></svg>
+    </button>
+    <span class="spacer"></span>
+    <button class="btn secondary lane" id="btn-warmup" title="Warm-up: practise the mechanic on an easy case"><span class="btxt">Warm-up</span></button>
+    <button class="btn secondary" id="btn-hint"><span class="btxt">Hint</span></button>
+    <button class="btn primary" id="btn-results" hidden><span class="btxt">See results</span></button>
+  </footer>
+</div>
+
+<div class="result" id="view-result">
+  <div class="rsheet">
+    <button class="btn ghost icon r-back" id="btn-back" title="Back to the board" aria-label="Back to the board">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+    </button>
+    <span class="stamp red lg closestamp">Closed</span>
+
+    <header class="hero">
+      <div class="caps" id="r-kicker">Case closed</div>
+      <div class="hero-time" id="r-time">00:00</div>
+      <div class="hero-sub" id="r-sub"></div>
+    </header>
+
+    <div class="facts" id="r-stats"></div>
+
+    <!-- The rank ladder (dec. 89). "RANK Detective · 2 DAYS TO INSPECTOR" named a rung and a
+         destination and showed neither the ladder they sit on nor how far along it you are, so
+         there was nothing to be proud of and nothing to aim at. All five rungs are drawn, the
+         one you hold is framed in ink, and the rungs carry their emoji again: a rank is content,
+         like the item emoji dec. 63 kept, not chrome.
+
+         The strip above and the ladder are one block and one world - you, all time - and the
+         button closes it: everything else about you is one press away, instead of being scattered
+         across the screens that belong to a case and to a day (docs/11-stats-ia.md §5). -->
+    <div class="ranks" id="r-ranks"></div>
+    <div class="me-link"><button class="btn ghost" id="btn-me-open">Your file</button></div>
+
+    <!-- Nine groups on one sheet is what "too much text, too many small details" was made of.
+         Three now, each one thing: who was fastest, what tomorrow should be, and (on a screen
+         with the room for it) the shape of today's times. The histogram restates the hero line
+         in a picture, so it is the block that yields on a phone rather than the vote. -->
+    <div class="r-body">
+      <section class="r-sec" id="r-histblock">
+        <div class="h3">Solve times today</div>
+        <div class="hist" id="r-hist"></div>
+        <div class="histx" id="r-histx"></div>
+      </section>
+
+      <!-- No heading: four tabs reading TODAY / WEEK / STREAK / ALL-TIME over a list of names
+           and times cannot be mistaken for anything but the standings, and "Standings" over
+           "Today" over a table was three labels for one block. -->
+      <section class="r-sec" id="r-lbblock">
+        <div class="tabs" id="r-scope" role="tablist">
+          <button class="on" data-scope="case" role="tab" aria-selected="true">This case</button>
+          <button data-scope="week" role="tab" aria-selected="false">7 cases</button>
+          <button data-scope="streak" role="tab" aria-selected="false">Streak</button>
+          <button data-scope="alltime" role="tab" aria-selected="false">All-time</button>
+        </div>
+        <div class="lb" id="r-lb"></div>
+        <div class="b-you" id="r-lbyou" hidden></div>
+        <div class="lb-foot">
+          <span class="led-note" id="r-lbnote"></span>
+          <button class="btn ghost lb-all" id="btn-lb-all">See all</button>
+        </div>
+      </section>
+
+      <!-- The countdown rides the heading instead of a dashed envelope of its own, and the vote
+           bar appears only once you have voted: before that it is the same fact the buttons are
+           asking you for. -->
+      <section class="r-sec" id="r-tomorrow">
+        <div class="h3">Tomorrow's case <span class="h3-note" id="r-next"></span></div>
+        <div class="vote-row" id="r-vote"></div>
+        <div class="votebar" id="r-votebar"></div>
+      </section>
+
+      <!-- The solution is a second face of the same sheet, not a section stacked under the
+           others: inline it costs ~150px, which is exactly what pushes the result past a
+           852px phone. Reached from the footer, per the spec's result order. -->
+      <section class="r-sec" id="r-solution" hidden>
+        <div class="h3">Full solution</div>
+        <table class="rows" id="r-table"></table>
+      </section>
+    </div>
+
+    <footer class="r-foot">
+      <button class="btn ghost" id="btn-solution">Full solution</button>
+      <button class="btn secondary" id="btn-again">Play this case again</button>
+    </footer>
+  </div>
+</div>
+
+<!-- Guest solve: nothing was recorded, so nothing is claimed (dec. 44). The screen's one red
+     mark is the stamp that says exactly that. -->
+<div class="result guest" id="view-guest">
+  <div class="rsheet">
+    <span class="stamp red closestamp">Not recorded</span>
+
+    <header class="hero">
+      <div class="caps">Case closed</div>
+      <div class="hero-time" id="g-time">00:00</div>
+      <div class="hero-sub">on your own clock</div>
+    </header>
+
+    <div class="r-body">
+      <section class="r-sec">
+        <div class="h3">You solved it as a guest</div>
+        <p class="g-copy">Deducto could not put a name to this solve, so there is no time on today's board, no rank and no streak - and inventing them would be a lie.</p>
+        <ul class="g-list">
+          <li>your solve time goes on today's board</li>
+          <li>your streak starts counting</li>
+          <li>tomorrow's difficulty listens to your vote</li>
+        </ul>
+      </section>
+    </div>
+
+    <footer class="r-foot">
+      <button class="btn primary" id="btn-login">Log in to count it</button>
+      <button class="btn secondary" id="btn-guest-back">Back to the board</button>
+    </footer>
+  </div>
+</div>
+
+<!-- Standings, open to every player and not only to a solver (task 3). A screen of its own,
+     reached by an explicit press and closed straight back to the board - docs/02-gameplay.md
+     forbids a leaderboard over a case you are still solving. -->
+<div class="standings" id="view-standings">
+  <div class="stsheet">
+    <header class="st-head">
+      <button class="btn ghost icon st-back" id="btn-st-back" title="Back to the board" aria-label="Back to the board">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 6l-6 6 6 6"/></svg>
+      </button>
+      <h2 class="st-title" id="st-title">Standings</h2>
+    </header>
+    <div class="st-meta" id="st-meta">Loading…</div>
+    <div class="tabs" id="st-scope" role="tablist">
+      <button class="on" data-scope="case" role="tab" aria-selected="true">This case</button>
+      <button data-scope="week" role="tab" aria-selected="false">7 cases</button>
+      <button data-scope="streak" role="tab" aria-selected="false">Streak</button>
+      <button data-scope="alltime" role="tab" aria-selected="false">All-time</button>
+    </div>
+    <section class="led-scroll st-list" id="st-list" aria-live="polite"></section>
+    <div class="b-you" id="st-you" hidden></div>
+    <footer class="st-foot">
+      <span class="led-note" id="st-note"></span>
+      <button class="btn secondary" id="btn-st-close">Back to the board</button>
+    </footer>
+  </div>
+</div>
+
+<!-- Your file: the whole of world ③ - you in this community, all time - in one place
+     (docs/11-stats-ia.md §5). It exists because that world had no home: a streak in the corner of a
+     case card, points in someone else's table, a rank in a subreddit flair, and `user:{username}`
+     accumulating four more figures that no screen has ever printed. A figure with no home takes the
+     nearest one, which is how `DETECTIVES 8` came to sit on a case's cover page.
+
+     Reached by tapping your own row in any standings list (plan 04 §D.4's own idea - the one place
+     a player is already looking at their own name) and from the result sheet's rank block. -->
+<div class="standings" id="view-me">
+  <div class="stsheet">
+    <header class="st-head">
+      <button class="btn ghost icon st-back" id="btn-me-back" title="Back" aria-label="Back">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 6l-6 6 6 6"/></svg>
+      </button>
+      <h2 class="st-title" id="me-name">Your file</h2>
+    </header>
+    <div class="st-meta" id="me-meta">Loading…</div>
+    <div class="me-body" id="me-body"></div>
+    <footer class="st-foot">
+      <span class="led-note" id="me-note"></span>
+      <button class="btn secondary" id="btn-me-close">Back</button>
+    </footer>
+  </div>
 </div>
 
 <div class="toast" id="toast"></div>
 
-<div class="coach" id="coach">
-  <div class="coach-ring" id="coach-ring"></div>
-  <div class="coach-tip" id="coach-tip">
-    <div class="coach-step" id="coach-step"></div>
-    <div id="coach-text"></div>
-    <div class="coach-btns">
-      <button class="ghost" id="coach-skip">Skip</button>
-      <button class="primary" id="coach-next">Next</button>
+<!-- First run: the warm-up rung comes before today's case (plan 02/B2). -->
+<div class="ladder" id="ladder">
+  <div class="ladder-card">
+    <div class="caps">First case?</div>
+    <h2 class="ladder-h">Start with a warm-up</h2>
+    <p class="ladder-p">An over-clued practice case: every move follows straight from a clue, so you learn the board without getting stuck. About a minute. Today's case comes right after - it is harder.</p>
+    <div class="ladder-btns">
+      <button class="btn primary" id="ladder-go">Start the warm-up</button>
+      <button class="btn ghost" id="ladder-skip">Skip to today's case</button>
     </div>
   </div>
 </div>
 
-<div class="overlay" id="overlay">
-  <div class="result">
-    <button class="r-close" id="btn-close" title="Close">✕</button>
-    <h2>🎉 Case <span>closed!</span></h2>
-    <div class="hero" id="r-hero"></div>
-    <div class="statrow" id="r-stats"></div>
-
-    <div class="hist-block" id="r-histblock">
-      <div class="hist-cap" id="r-histcap"></div>
-      <div class="hist" id="r-hist"></div>
-      <div class="hist-x" id="r-histx"></div>
+<!-- Finishing a warm-up used to print a grey plaque and then drive you to today's case on a
+     1.3s timer. It is the one moment in the lane worth marking, and the player - not the
+     timer - decides what happens next: today's case, or another of the 15 warm-ups. -->
+<div class="ladder" id="wdone">
+  <div class="ladder-card">
+    <span class="stamp">Warm-up solved</span>
+    <h2 class="ladder-h" id="wdone-h">That is the whole mechanic</h2>
+    <p class="ladder-p" id="wdone-p">Today's case works exactly the same way - it just doesn't hand you every step.</p>
+    <div class="ladder-btns">
+      <button class="btn primary" id="wdone-go">Open today's case</button>
+      <button class="btn secondary" id="wdone-more">One more warm-up</button>
     </div>
+  </div>
+</div>
 
-    <h3>Today's fastest</h3>
-    <div class="lb-mini" id="r-lb"></div>
-
-    <details class="final-wrap">
-      <summary class="h3">Full solution&nbsp;<span class="sum-hint">· expand</span></summary>
-      <table class="final" id="r-table"></table>
-    </details>
-
-    <div id="r-tomorrow">
-      <h3>Tomorrow's case - you decide</h3>
-      <div class="vote-row" id="r-vote"></div>
-      <div class="envelope">
-        <div class="env-top" id="r-envtop">✉️ NEXT CASE <span class="env-seal">SEALED</span></div>
-        <div class="votebar" id="r-votebar"></div>
-        <div class="next-case" id="r-next"></div>
-      </div>
-    </div>
-
-    <div class="xtra">
-      <button class="btn secondary" id="btn-again">↺ Play this case again</button>
+<div class="coach" id="coach">
+  <div class="coach-ring" id="coach-ring"></div>
+  <div class="coach-tip" id="coach-tip">
+    <div class="caps" id="coach-step"></div>
+    <div id="coach-text"></div>
+    <div class="coach-btns">
+      <button class="btn ghost" id="coach-skip">Skip</button>
+      <button class="btn primary" id="coach-next">Next</button>
     </div>
   </div>
 </div>

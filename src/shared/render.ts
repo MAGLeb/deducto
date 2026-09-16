@@ -6,14 +6,19 @@ import type { Theme } from "./themes.js";
 import { FLAIR, TIME_EMOJI } from "./themes.js";
 
 const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
-const itemLc = (theme: Theme, token: string): string => theme.objects[token].label.toLowerCase();
+// An item is always named glyph-first (`🌾 flour`): the board's chips are glyph-only, so the
+// clue is the one place a reader learns which picture the word means (dec. 150).
+const itemRef = (theme: Theme, token: string): string => {
+  const o = theme.objects[token];
+  return `${o.emoji} ${o.label.toLowerCase()}`;
+};
 
 // Description of a category value (as a subject phrase).
 function phrase(cat: string, val: string, theme: Theme): string {
   if (cat === "s" || cat === "suspect") return val; // suspect name
   if (cat === "flair") return `the ${FLAIR[val].word} coat`;
   if (cat === "time") return `the one seen at ${val}`;
-  return `the ${itemLc(theme, val)}`; // object
+  return `the ${itemRef(theme, val)}`; // object
 }
 
 const isTime = (r: Ref) => r[0] === "time";
@@ -25,7 +30,7 @@ export function renderClue(c: Clue, theme: Theme): string {
     case "ne": {
       if (c.cat === "time") return `${c.s} wasn't seen at ${c.v}.`;
       if (c.cat === "flair") return `${c.s}'s coat isn't ${FLAIR[c.v].word}.`;
-      return `${c.s} didn't carry the ${itemLc(theme, c.v)}.`; // object
+      return `${c.s} didn't carry the ${itemRef(theme, c.v)}.`; // object
     }
     case "same": {
       // one side is time → "<other> was seen at HH:MM"
@@ -38,7 +43,7 @@ export function renderClue(c: Clue, theme: Theme): string {
       if ((isFlair(c.a) && isObject(c.b)) || (isObject(c.a) && isFlair(c.b))) {
         const coat = isFlair(c.a) ? c.a : c.b;
         const obj = isObject(c.a) ? c.a : c.b;
-        return `The ${itemLc(theme, obj[1])} was carried by the ${FLAIR[coat[1]].word} coat.`;
+        return `The ${itemRef(theme, obj[1])} was carried by the ${FLAIR[coat[1]].word} coat.`;
       }
       return `${cap(phrase(c.a[0], c.a[1], theme))} and ${phrase(c.b[0], c.b[1], theme)} are the same person.`;
     }

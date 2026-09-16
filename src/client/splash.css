@@ -1,0 +1,473 @@
+/* First screen: what the feed shows (devvit.json entrypoint "default", height "regular" = 320px).
+   Requirement from the Featuring Guide - a custom first screen, self-explanatory, zero scrolling.
+   Nothing here is scrollable or clipped.
+
+   D3 "Manila": this is the cover of the file. The splash is the ONE screen where the case stamp
+   block is red - here the identity is the message, and in the game the state is.
+
+   2026-08-08 (dec. 74): the card USES THE SLOT. It used to be a 560px box centred in a 320px
+   tall webview, which left roughly half the feed slot as empty page around it - the first thing
+   anyone sees of Deducto, and it read as a stamp stuck in the corner of an envelope. Now the
+   card is the slot: one column, the case identity at the top, the CTA and the social line
+   pinned to the bottom edge, and the slack in between spent as the margin of a cover page. */
+@import "./base.css";
+
+.splash {
+  height: 100%;
+  display: flex;
+  padding: var(--sp-2);
+}
+
+/* Dec. 74's "the card IS the slot" is right at the height the slot actually is - 320px, the
+   `regular` entrypoint. Nothing in production renders this document taller, but a cover page
+   stretched into a viewport that is does not become a bigger cover page: it becomes a title at
+   the top, a button at the bottom and a hole between them, which a reader with no context read
+   as "is this still loading?". Above 440px the card stops stretching and is centred instead, so
+   the 320px slot is untouched and every other height gets a cover page rather than a void. */
+@media (min-height: 440px) {
+  .splash { align-items: center; }
+  .card { max-height: 420px; }
+}
+
+.card {
+  flex: 1 1 auto; min-height: 0;
+  width: 100%; max-width: 720px; margin: 0 auto;
+  display: flex; flex-direction: column;
+  background: var(--sheet);
+  border: 1px solid var(--rule-strong);
+  box-shadow: var(--shadow-1);
+  padding: var(--sp-4);
+}
+
+/* Identity at the top, the docket and the CTA on the bottom edge, and the slack between them -
+   between the rules and the file's figures, which is where a margin belongs on a cover page.
+   It used to sit between the title and the paragraph, which read as two disconnected screens. */
+.top { flex: 0 0 auto; display: flex; align-items: flex-start; gap: var(--sp-3); }
+
+.head { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+
+.wordmark {
+  font: 800 var(--fs-sm)/1 var(--font-mono);
+  letter-spacing: .3em; text-transform: uppercase; color: var(--ink);
+}
+/* the splash's one red mark: the case stamp block (case number + the tier stamp beside it) */
+.cno {
+  margin-top: var(--sp-2);
+  font: 700 var(--fs-2xs)/1 var(--font-mono);
+  letter-spacing: var(--ls-caps); text-transform: uppercase; color: var(--stamp);
+}
+/* 700, not 600: "может title выделить". The serif is the card's largest thing already, so this
+   is the one channel left that costs no height in a 320px slot - and the case title is the only
+   line on the cover that names what the reader is about to open. */
+.ctitle {
+  font: 700 var(--fs-2xl)/1.1 var(--font-serif);
+  letter-spacing: -.015em;
+  margin: var(--sp-2) 0 0;
+  /* two lines max, then ellipsis - a long theme title can never push the CTA out of view */
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+}
+/* The brief: the rule of the game, then what this case asks of you. One box so the pair can take
+   the left column's slack as a margin instead of leaving it in a lump above the CTA (dec. 90).
+
+   It is the ONE elastic child of the card (dec. 111's rule, applied here). Every child used to be
+   `flex: 0 0 auto`, so nothing could give and the card simply overflowed its own border - 3px at
+   360x320, in BOTH font profiles, i.e. a budget that was never balanced at the narrowest slot
+   rather than a metric accident. Making the paragraph shrinkable and clipped is the guarantee that
+   holds at any font size, and it gives up the right thing: the CTA and the docket are what the
+   screen is for, and the explanation is what a reader can lose a line of. It is a safety net, not
+   the plan - the sizes below are tuned so it never actually engages. */
+.brief { flex: 0 1 auto; min-height: 0; overflow: hidden; }
+/* Clamped, not trusted: a paragraph that runs one line long in the 320px feed slot has nowhere
+   to go and paints straight over the docket under it. */
+/* The bottom margin is `sp-2`, not `sp-3`: what follows the hook used to be a second paragraph and
+   is now the row of named items, which belongs TO the hook - it names the things the sentence is
+   about. A 12px gutter separated them into two blocks and cost the card the two pixels the probe
+   found it short of at 360x800. */
+.rules {
+  margin: var(--sp-2) 0 var(--sp-2);
+  font-size: var(--fs-sm); color: var(--ink-2); max-width: 60ch;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden;
+}
+/* ---- the brief as labelled facts (solved state) ----
+   The solved card carried three facts as one paragraph - "Last case: u/ma9leb in 03:18 · 1 solved
+   it. Next case in 23h 56m. 1 of 5 votes in on how hard the next one should be." - and a reader
+   who wanted any single one of them had to read all three to find it. The two figures that are the
+   POINT of the block, a name and a countdown, sat mid-sentence with nothing marking them.
+   A key column and full ink on the figures is the same grammar the docket already uses, one line
+   at a time; the card now has one way of stating a fact instead of two. */
+/* `display` is deliberately NOT set here for `.tierline`: it is the ONE element on this card whose
+   visibility is owned by the media queries (hidden below 560px, hidden again below 300px of
+   height), and a `.rows` rule setting `display: block` outranks both of them - which would have
+   pushed the vote row onto exactly the 320px phone slot the whole layout is budgeted against.
+   Only the clamp is lifted; the rows stack as `-webkit-box` children, which is vertical already. */
+.rules.rows { display: block; }
+.rules.rows, .tierline.rows { -webkit-line-clamp: none; max-width: none; }
+.brow { display: flex; align-items: baseline; gap: var(--sp-3); }
+.brow + .brow { margin-top: var(--sp-1); }
+/* Wide enough for the longest key (`PREVIOUS CASE`), because the point of a key column is that the
+   values start at the same x. A ragged left edge on three stacked facts is just three sentences
+   again with capitals on them. */
+.bk {
+  flex: 0 0 auto; min-width: 104px;
+  font: 700 var(--fs-2xs)/1.5 var(--font-mono);
+  letter-spacing: var(--ls-caps); text-transform: uppercase; color: var(--ink-3);
+}
+.bv { min-width: 0; font-size: var(--fs-sm); line-height: 1.4; color: var(--ink-2); }
+/* The figures the row exists for - a username, a time, a countdown - in the reading ink the rest of
+   the sentence deliberately is not. Tabular so a countdown does not jitter as its digits change. */
+.bv b { font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
+.bv .ticks { margin-right: var(--sp-2); transform: translateY(1px); }
+/* The archive card's way into the case that is live now - the only tappable thing in the brief.
+   A row rather than a third button: dec. 98 gives this card two, and the standings is not the one
+   to surrender, so the affordance has to live inside the row. Reading ink against the muted
+   sentence around it, a line under it, and an arrow that says this one leaves the post.
+
+   `text-decoration` and NOT `border-bottom`, which is the reverse of what was written here first,
+   and the frames settled it: a border on this button does not paint at all - not as a bottom edge,
+   not on all four sides, not with `appearance: none`, and not at any display value - while its
+   background paints normally and the same border on a div beside it (the docket's own rule) is
+   fine. Firefox draws the underline; that is the whole argument. `display: inline` because the
+   decoration has to run under the arrow too, and a flex container is the one box a decoration is
+   not guaranteed to reach. Vertical padding on an inline box does not move the line, but it does
+   grow the hit area - a bigger tap target for nothing. */
+.golive {
+  display: inline; font: inherit; color: var(--ink); cursor: pointer;
+  background: none; border: 0; padding: var(--sp-1) 0;
+  text-decoration: underline; text-decoration-color: var(--rule-strong);
+  text-decoration-thickness: 1px; text-underline-offset: 3px;
+}
+.golive:hover { text-decoration-color: var(--ink); }
+
+/* What THIS case asks of you. Hidden on a phone-width card, where the single column is already
+   full and the sentence would be pushing the CTA down; shown from 560px, which is the layout
+   whose left column had the hole (dec. 90). */
+.tierline {
+  display: none;                 /* turned on from 560px, below */
+  margin: 0 0 var(--sp-3);
+  font-size: var(--fs-sm); color: var(--ink-3); max-width: 52ch;
+}
+.head { min-height: 0; overflow: hidden; }
+
+/* ---- the docket: the file's own figures, and what fills the middle of the slot ----
+   Dec. 74 stretched the card to the feed slot and the slot was still mostly empty page: a title,
+   a paragraph, a button and a thin line of caps, with a hole between them. Everything below comes
+   from GET /api/preview, which was already answering it and was being spent on one 11px line.
+   The first cell is the board - twelve countable squares, the same component the game's HUD uses
+   - so the feed's first screen shows what the game IS, not only what it is called. */
+.docket {
+  flex: 0 0 auto;
+  display: flex; flex-wrap: wrap;
+  margin-top: auto;
+  border: 1px solid var(--rule-strong);
+}
+.docket:empty { display: none; }
+.dcell {
+  flex: 1 1 0; min-width: 88px;
+  padding: 6px var(--sp-3);
+  border-left: 1px solid var(--rule);
+}
+.dcell:first-child { border-left: 0; }
+.dcell.wide { flex: 3 1 160px; }   /* a sentence where a figure would be a zero (dec. 37) */
+/* ---- the world boundary (docs/11-stats-ia.md §1/R3) ----
+   Cells about THIS CASE and cells about YOU are divided one weight heavier than cells about the
+   same thing. It is the only signal that the subject has changed, and it has to be one that costs
+   no width and no word: naming the world in every caps key is noise, and naming it nowhere is what
+   let a cell glued to the case be read as being about the case while carrying the all-time
+   community. Same ink as every other rule here - the channel is weight, never colour. */
+.dcell.wbreak { border-left-color: var(--rule-strong); }
+/* `.wide`'s sibling `.word` is gone with the cell it existed for: `FASTEST / Yours` withheld the
+   very figure the cell is about, and the benchmark now prints the time with a `You` tag beside it
+   instead (docs/11-stats-ia.md §7). */
+/* `--ink-2`, not `--ink-3`. At 11px with .12em of tracking the muted-caption token is doing a
+   caption's job at a label's size, and the owner read the result off a phone as figures with
+   nothing anchoring them: "цифры сливаются". One step of ink is the whole fix - the key stops
+   dissolving into the sheet, and the figure keeps its own step above it (full `--ink`, 700, and
+   1.5-2.5x the size), so the pair is still a hierarchy rather than two things shouting. */
+.dk {
+  font: 700 var(--fs-2xs)/1 var(--font-mono);
+  letter-spacing: var(--ls-caps); text-transform: uppercase; color: var(--ink-2);
+}
+/* `FASTEST 02:41 You of 7`: the figure, then who owns it (the filled `.tag` from base.css - the
+   same component that marks your row in the ledger, borrowed rather than reinvented), then the size
+   of the field it is the best of. A figure line may not wrap: a band that grows paints its
+   neighbour's key over its own figure, in silence, on a page pinned to `overflow: hidden`
+   (dec. 93). A `.wide` value is the exception, because it is a sentence - and it wins on
+   specificity rather than on order, so no later rule can quietly take it back. */
+.dv {
+  margin-top: 4px;
+  display: flex; align-items: baseline; gap: var(--sp-2); white-space: nowrap;
+  font: 700 var(--fs-md)/1.1 var(--font-mono); font-variant-numeric: tabular-nums; color: var(--ink);
+}
+.dv .tag { flex: 0 0 auto; align-self: center; }
+.dcell.wide .dv {
+  display: block; white-space: normal;
+  font: 400 var(--fs-sm)/1.3 var(--font-sans); color: var(--ink-2);
+}
+/* Who holds the best time. Its own line because a username is up to 20 characters and the phone
+   band is ~93px - there is nothing to share a line with. Clipped rather than wrapped: a second
+   line here would grow the band, and a band that grows paints its neighbour's key over its own
+   figure (dec. 93). `min-width: 0` is what lets the ellipsis actually engage inside a flex cell. */
+/* `.drank` is the same slot carrying `3RD OF 8` under your own time: two cells about this case,
+   each a key, a figure and one line of context, and now the same height as each other. */
+/* The four items. Sized so they read as marks on a cover page rather than as a toolbar: one step
+   above the brief, with room around them, and never a second line - a case has exactly four and a
+   wrapped row would be the card growing inside a 320px slot (dec. 93). */
+.items {
+  margin: var(--sp-1) 0 0;
+  /* 1.3, not 1.1. An emoji is drawn from a colour font whose glyphs are TALLER than the Latin
+     ascender at the same size, so a line box cut to 1.1 is shorter than the thing standing in it -
+     the probe caught the row overflowing its own box by 2px at 360x320 and 393x320, in both font
+     profiles, which is the silent-paint-through class dec. 111 is about. Line height is the whole
+     fix; the row still never wraps, because a case has exactly four items. */
+  /* Four equal columns, each glyph centred over its own word. A `space-between` row put the
+     outer two items hard against the card's padding and left the gaps uneven, which is the
+     "сбитый" the owner is describing - four equal tracks are symmetric by construction and stay
+     symmetric whatever the words are. `1fr` and `min-width: 0` together are what let a long label
+     ellipsis instead of widening its track and pushing the row out of the card. */
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 0;
+  overflow: hidden;
+}
+.items:empty { display: none; }
+.item { min-width: 0; display: flex; flex-direction: column; align-items: center; }
+/* One step down from the hook's size, and not negotiable upward: `.card` stops growing at 420px, so
+   a tall phone has exactly the budget the 320px feed slot has - the probe found the same overflow
+   at 360x800 that it found in the slot. A glyph is a mark; the word under it is the content. */
+.ig { font-size: var(--fs-md); line-height: 1.25; }
+/* The word, and why it is a caps label rather than sentence case: it is a NAME on an evidence
+   list, not prose, and the same mono caps every key on this card uses says so without a rule
+   around it. Clipped rather than wrapped - a second line here grows the block, and the block is
+   inside a 320px slot. */
+.il {
+  max-width: 100%;
+  font: 700 var(--fs-2xs)/1.2 var(--font-mono);
+  letter-spacing: .04em; text-transform: uppercase; color: var(--ink-3);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.dwho, .drank {
+  min-width: 0; margin-top: 2px;
+  font: 400 var(--fs-2xs)/1.2 var(--font-mono); color: var(--ink-3);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.drank { font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-2); }
+/* The rung and the target on one wrapping row: two facts about the same climb, and on a phone they
+   cost one line together instead of two. */
+.dprog { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--sp-2); margin-top: 2px; }
+/* The rank the run has earned, and the one it is heading for. The rank is ink the reader has
+   already got; the goal is deliberately lighter and sentence-cased - it is the only line on this
+   card that is about something that has NOT happened yet, and dressing it like a figure would let
+   it read as one. It is also the only line here allowed to wrap: it is a sentence, it is last in
+   its cell, and a target the reader cannot finish reading is not a target. */
+.dgoal { font: 400 var(--fs-2xs)/1.25 var(--font-sans); color: var(--ink-3); }
+
+/* The row carries the case and the table (dec. 98) - as two halves of one row, on the owner's
+   call, asked twice: "хочу кнопки одинаковые сделать". Dec. 98 built the hierarchy out of WIDTH as
+   well as fill, sizing the standings button to its own label so the pair could not read as equals.
+   The fill alone carries it: one filled button beside one outlined button of the same size is
+   still unambiguously a primary, and the two-sizes-and-two-treatments version read as an
+   afterthought bolted to the side of the real button rather than as the second half of a choice.
+   The primary may take two lines at half width - it is a column box with a 56px floor, so a
+   wrapped label and its sub still fit inside the button that was already there. */
+.cta { display: flex; gap: var(--sp-2); margin-top: var(--sp-3); }
+.cta .btn { min-height: 56px; flex: 1 1 0; min-width: 0; padding: 0 var(--sp-2); }
+.cta .btn.primary { flex-direction: column; gap: 2px; }
+.cta .btn.secondary { white-space: nowrap; }
+.cta .sub {
+  font: 600 var(--fs-2xs)/1 var(--font-mono);
+  letter-spacing: .06em; text-transform: uppercase; opacity: .85;
+}
+.cta .sub[hidden] { display: none; }
+
+/* A phone carries three cells across, which is now the most the docket ever draws - so nothing is
+   truncated here any more (docs/11-stats-ia.md §4.1). The rule stays as the belt to that brace: a
+   fourth cell would wrap onto a second row inside a 320px slot, silently, on a page pinned to
+   `overflow: hidden`.
+
+   The figures share a baseline whatever their keys do. A 14-character key like `CURRENT STREAK`
+   does not fit a 93px band at 11px mono and wraps to two lines - which used to be invisible,
+   because that cell was never among the three a phone drew in the solved state. With the cells
+   stretched to the tallest of them, a one-line key left its figure sitting a whole line above its
+   neighbours'. Bottom-aligning the figures fixes it without shortening a label that dec. 100 needs
+   in full to stay distinct from `LONGEST STREAK`. */
+/* ---- the phone: a composition, not a table jammed into three columns ----
+   Three cells wide inside ~336px gave each one ~105px, and the third of them carries the longest
+   key on the card. The result wrapped 2 + 1 with a hairline through the middle of nothing, which
+   is what the owner photographed: "левый нижний блок визуально слишком тяжёлый".
+   So the phone stops pretending it is the desktop strip. The two cells about THIS CASE keep a row
+   and split it evenly; the cell about the PLAYER takes the full width under them and centres its
+   own lines. That also puts the world boundary (docs/11-stats-ia.md R3) on a horizontal rule
+   across the whole block, which is a stronger break than a vertical hairline ever was - and it is
+   the break that stops `CLOSED IT` and the player's own count reading as one fact printed twice.
+   Everything is centred, because a block that is centred inside the card cannot be "прибит к
+   левому краю", and the air is padding rather than empty tracks. */
+@media (max-width: 559px) {
+  .dcell:nth-child(n+4) { display: none; }
+  .docket { display: grid; grid-template-columns: 1fr 1fr; }
+  .dcell {
+    display: flex; flex-direction: column; align-items: center; text-align: center;
+    padding: var(--sp-2) var(--sp-2);
+    border-left: 0;
+  }
+  .dcell:nth-child(2) { border-left: 1px solid var(--rule); }
+  .dcell:nth-child(3) {
+    grid-column: 1 / -1;
+    border-top: 1px solid var(--rule);
+  }
+  /* The subject changes here, so the rule that says so is the heavier one. */
+  .dcell:nth-child(3).wbreak { border-top-color: var(--rule-strong); }
+  .dcell .dv { margin-top: auto; padding-top: 4px; justify-content: center; }
+  /* A sentence stops being a nowrap figure line once it is centred in a full-width band. */
+  .dcell .dprog { justify-content: center; }
+  .dcell .dgoal { white-space: normal; }
+  .dcell .drank { margin-top: 0; }
+}
+
+/* From 560px the card is two columns: identity and rules on the left with the CTA under them,
+   the stamp and the docket standing on the right against a structural rule. That right half is
+   what was empty page at 640x320 - the commonest desktop feed width. `display: contents` on the
+   wrapper is what lets the stamp cross into the second column without a second copy of it. */
+@media (min-width: 560px) {
+  .card {
+    display: grid; align-content: stretch;
+    grid-template-columns: 1fr minmax(190px, 34%);
+    grid-template-rows: auto 1fr auto;
+    column-gap: var(--sp-5);
+  }
+  .top { display: contents; }
+  .head { grid-column: 1; grid-row: 1; }
+  /* Centred, not top-aligned: the left column's slack used to collect in one lump above the CTA
+     (~100px at 1440x320), which is what reads as a column that stops halfway. Split in two it is
+     the leading of a cover page - and the right column, which now runs full height, has none to
+     give back. */
+  .brief { grid-column: 1; grid-row: 2; align-self: center; }
+  .tierline {
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+  }
+  .tierline.rows { display: block; }
+  .tierline:empty { display: none; }
+  .card > .top > .stamp.tier {
+    grid-column: 2; grid-row: 1;
+    justify-self: start; align-self: start; align-items: flex-start;
+    margin: 0 0 var(--sp-3) var(--sp-4);
+  }
+  .cta { grid-column: 1; grid-row: 3; align-self: end; }
+  /* The docket is a ruled ledger, not a stack of boxes with air under each of them (dec. 90).
+     `space-between` on fixed-height cells put every gap AFTER a figure, which is what the owner
+     was looking at: a caps key, a number, and then a hole down to the next hairline. The cells
+     now split the column equally and centre their own content, so the same slack becomes the
+     leading inside each band and every hairline divides two full bands. */
+  .docket {
+    grid-column: 2; grid-row: 2 / span 2; align-self: stretch;
+    flex-direction: column; justify-content: stretch; margin-top: 0;
+    border: 0; border-left: 1px solid var(--rule-strong);
+  }
+  /* `min-height: 0` is gone, and that is the defect, not a tidy-up: with it, a band was allowed
+     to be SHORTER than the key and figure inside it, and a band that does not fit here neither
+     clips nor scrolls - the next band's key is simply painted over the figure above it, in
+     silence (dec. 93). The bands still split the column equally; what changed is that the split
+     can no longer go below what a band is carrying. */
+  .dcell, .dcell.wide {
+    flex: 1 1 0; border-left: 0;
+    display: flex; flex-direction: column; justify-content: center;
+    border-top: 1px solid var(--rule);
+    padding: var(--sp-1) 0 var(--sp-1) var(--sp-4);
+  }
+  .dcell:first-child { border-top: 0; }
+  /* Down the column the divider is the top edge, so the world boundary moves with it. */
+  .dcell.wbreak { border-left-color: var(--rule); border-top-color: var(--rule-strong); }
+  /* The figures carry the weight the empty space used to: this is the file's own arithmetic.
+     How much weight is a function of HOW MANY bands there are, which is why splash.ts states the
+     count on the docket. Three bands in a 320px slot have ~73px each and 26px is right - and three
+     is now the most the docket can ever draw (docs/11-stats-ia.md §4.1), so dec. 93's `data-n="4"`
+     and `="5"` rungs have been deleted rather than left as rules nothing can select. */
+  .docket { --dv-fs: var(--fs-xl); --dv-gap: 5px; }
+  .dv { font-size: var(--dv-fs); margin-top: var(--dv-gap); }
+  .dcell.wide .dv, .dcell.word .dv { font-size: var(--fs-sm); }
+}
+
+@media (max-width: 719px) {
+  .card { padding: var(--sp-3); }
+  .ctitle { font-size: var(--fs-xl); }
+}
+/* The inline feed slot is 320px tall - the height the card is actually designed for. Everything
+   still fits at 26px of serif; below 300 the rules paragraph is the first thing to go. */
+@media (max-height: 360px) {
+  .ctitle { font-size: var(--fs-xl); margin-top: var(--sp-1); }
+  /* Two whole lines, and they have to FIT: the clamp decides how many lines there are, and the
+     leading plus the margins decide whether those lines fit the box the card can spare. At 360x320
+     they did not, by 8px, and the elastic `.brief` above would have started clipping the sentence
+     that teaches a stranger the game. Tightened here rather than clamped to one line, because two
+     lines of the rule are the rule and one line is half of it. */
+  .rules { -webkit-line-clamp: 2; line-height: 1.35; margin: var(--sp-1) 0 var(--sp-1); }
+  .tierline { -webkit-line-clamp: 2; margin-bottom: var(--sp-2); }
+  .cta { margin-top: var(--sp-2); }
+  .cta .btn { min-height: 50px; }
+  /* 3px, not 5. At 360x320 - the smallest slot the feed actually hands this card - the column ran
+     3px long and the card overflowed its own border in BOTH font profiles, so this is not a metric
+     accident but a budget that was simply never balanced at that width. The four vertical pixels
+     come from here because the docket is the block with slack to give: a band at this height is a
+     key over a figure and the padding is the only thing between them and the hairline. The rules
+     paragraph is what the elastic `.brief` would otherwise have started clipping, and a first
+     reader losing the sentence that explains the game is a worse trade than a tighter band. */
+  /* 2px, down from 3. The band is a key over a figure and the padding is all that stands between
+     them and the hairline - and the block below now carries a third line for the player's climb,
+     which has to come from somewhere. Measured against the probe, not chosen: at 360x320 the
+     archive card ran 9px long and this is where the card had slack left. */
+  .dcell { padding: 2px var(--sp-2); }
+  .dv { font-size: var(--fs-sm); margin-top: 2px; }
+  /* 46, not 50. Still above the 44px tap target the whole system is built to; the four pixels buy
+     the row of named items its own line at the one height where the card cannot afford both. */
+  .cta .btn { min-height: 46px; }
+  /* ---- the items row inside the 320px feed slot ----
+     The word under each glyph costs a whole line, and at this height `.brief` has ~70px to spend on
+     the hook AND the row. The probe measured the result at 90px in a 70px box, i.e. the sentence
+     painting through into the docket's keys - so the row is compacted here rather than left to be
+     discovered. The glyph gives up a step (it is a mark, not the content), the gap and the margin
+     give up their slack, and the WORD keeps its size: it is the part that stopped the row from
+     being a decoration, and shrinking it below the caps label everything else on this card uses
+     would put it under the legibility floor the whole palette was rebuilt for. */
+  /* At the slot's real height the card cannot carry the hook AND the named items AND a two-row
+     docket - measured, not assumed: the probe put `.brief` at 76px of content in a 37px box. So at
+     this height the items row IS the description. Four named objects say what the case is about
+     more concretely than a sentence clipped to two lines, they differ every day, and unlike the
+     sentence they cannot be half-read. The hook comes back the moment the viewport can carry it.
+     `:not(.rows)` is load-bearing: the same element carries the SOLVED card's labelled facts - the
+     countdown, the live-case link - and those are the opposite case. They are short, they are the
+     only forward-looking thing on a spent card, and that state has no items row competing for the
+     height in the first place. */
+  .rules:not(.rows) { display: none; }
+  .items { margin-top: var(--sp-1); }
+  /* The key column gives back 28px at the one height where the value has nowhere to wrap to. It is
+     still wide enough to hold `PREVIOUS`-length keys on one line; what it stops is the value
+     spilling onto a second line that the slot has no room for (probe: 45px of content in 33px). */
+  .bk { min-width: 76px; }
+}
+/* The 320px feed slot in the TWO-column layout is the frame the owner was looking at, and it is
+   the one that has height to spare: three bands of ~85px carrying an 11px key and a figure. The
+   rule above shrinks the figure for the single-column card, where the docket is a strip across
+   the bottom of an already full page; here the band can carry 21px and should. */
+@media (max-height: 360px) and (min-width: 560px) {
+  .dcell { padding: var(--sp-1) 0 var(--sp-1) var(--sp-4); }
+  .docket { --dv-fs: var(--fs-lg); --dv-gap: 3px; }
+  .dcell.wide .dv { font-size: var(--fs-sm); }
+}
+@media (max-height: 300px) {
+  .splash { padding: var(--sp-1); }
+  .card { padding: var(--sp-2) var(--sp-3); }
+  .rules, .tierline { display: none; }
+  .ctitle { -webkit-line-clamp: 1; font-size: var(--fs-lg); margin-bottom: 0; }
+  .cta { margin-top: var(--sp-2); }
+  .cta .btn { min-height: var(--tap); }
+}
+/* Below 300px the card has already given up the rules paragraph and a line of the title, and the
+   column left for the docket is ~213px at 300 and ~173px at 260. One more step down the same
+   ladder is what keeps the bands inside it; the padding goes with the type, because at this
+   height the leading inside a band is the only slack left to spend. */
+@media (max-height: 300px) and (min-width: 560px) {
+  .docket { --dv-fs: var(--fs-md); }
+  .dcell, .dcell.wide { padding-top: var(--sp-0); padding-bottom: var(--sp-0); }
+}
+@media (max-height: 240px) {
+  .wordmark { display: none; }
+  .docket { display: none; }
+}
