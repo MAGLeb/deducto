@@ -20,7 +20,10 @@ import { decodeSolve, solvesKey } from "./leaderboard.js";
 
 export const SERVED_KEY = "lt:served";          // hash: bank idx -> case number (or "?" if unknown)
 const SEEDED_KEY = "lt:servedSeeded";           // "1" once the set has been seeded from the posts
-const DUMPED_AT = "caselog:dumpedAt";           // ms of the last per-case table written to the log
+// v2: the first version wrote the whole table as ONE log message, and Devvit cuts a log entry at
+// roughly 4 KB - the table stopped mid-row at case #43. The key moved with the fix so the corrected
+// dump runs on the next hourly tick instead of waiting out the old stamp.
+const DUMPED_AT = "caselog:dumpedAt:v2";       // ms of the last per-case table written to the log
 const DUMP_EVERY_MS = 20 * 3_600_000;
 
 export interface Published { postId: string; n: number | null; idx: number; date: string; level: number | null }
@@ -123,8 +126,9 @@ export async function maybeDumpStats(
   const last = Number((await redis.get(DUMPED_AT)) ?? 0) || 0;
   if (Date.now() - last < DUMP_EVERY_MS) return `${seeded}; stats: not due`;
   const lines = await caseStatsLines(info);
-  console.log("[cases] per-case record, all published cases:\n  " + lines.join("\n  ") +
-    "\n  " + await remaining());
+  // One log entry per line. A Devvit log entry is cut at roughly 4 KB, and the table is far longer.
+  console.log("[cases] per-case record, all published cases:");
+  for (const l of [...lines, await remaining()]) console.log(`[cases] ${l}`);
   await redis.set(DUMPED_AT, String(Date.now()));
   return `${seeded}; stats: ${lines.length} line(s) written`;
 }

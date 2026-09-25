@@ -1139,11 +1139,11 @@ section("The per-case record: seeded and written by the hourly job, no button");
   await call("POST", "/internal/scheduler/case-stats");
   check("the job seeds the no-repeat set on its own, without waiting for a publication",
     HASHES.get("lt:served")?.[String(old[0])] !== undefined, JSON.stringify(HASHES.get("lt:served")));
-  check("…and writes the table once", Number(STRINGS.get("caselog:dumpedAt")) > 0,
-    String(STRINGS.get("caselog:dumpedAt")));
-  const stamp = STRINGS.get("caselog:dumpedAt");
+  check("…and writes the table once", Number(STRINGS.get("caselog:dumpedAt:v2")) > 0,
+    String(STRINGS.get("caselog:dumpedAt:v2")));
+  const stamp = STRINGS.get("caselog:dumpedAt:v2");
   await call("POST", "/internal/scheduler/case-stats");
-  check("…and not again within the day", STRINGS.get("caselog:dumpedAt") === stamp, "");
+  check("…and not again within the day", STRINGS.get("caselog:dumpedAt:v2") === stamp, "");
   resetRedis();
   post(sameDay);
   context.postId = POST;
