@@ -33,7 +33,7 @@ Further formats - ordering and constraint puzzles, patterns, sequences - arrive 
 - **The only personal data ever shown is a Reddit username**, and only on a leaderboard row. Internally the app keys your progress, streak and warm-up counter on the opaque Reddit user id (`t2_…`), which is never displayed and never sent to a client - a raw id reaching a public table is treated as a bug and tested against. A logged-out visitor can play a full case and is told plainly, on the result screen, that nothing was recorded.
 - **The day rolls over at UTC midnight**, not local midnight - that is when the Today board resets and the next case becomes due.
 - **The publish item has no same-day guard yet.** Press it twice in one day and you get two cases, with the app pointing at the newer one. A lock is on the roadmap; until then, one press per day.
-- **The puzzles are pre-generated and machine-verified** - 160 cases shipped in the app bundle, each proven to have exactly one solution. Nothing is generated at runtime, so a case can never be unsolvable.
+- **The puzzles are pre-generated and machine-verified** - 260 cases shipped in the app bundle, each proven to have exactly one solution. Nothing is generated at runtime, so a case can never be unsolvable.
 
 ---
 
@@ -52,11 +52,12 @@ Because the solution is unique, "all 12 cells deduced + no clue contradicted" *i
 - 🗓️ **A new puzzle every day**, published in [r/deducto_puzzle](https://www.reddit.com/r/deducto_puzzle/) - and the run counts puzzles, so a change of format never costs anybody their streak.
 - 🔥 **Streaks & ranks** - close published cases in a row, each on the day it ran, to climb 🔎 Detective (1 case) → 🕵️ Inspector (3) → 🎩 Chief Inspector (7) → 🧠 Mastermind (14) → 🏛 Legend of the Yard (30). An archive case is still worth points, but it does not extend a run; a day the subreddit published nothing does not break one, because there was nothing to miss.
 - 🏆 **Standings, open to everyone** - a button on the board opens four leaderboards at any time, whether or not you have solved today: **Today** (by time), **Week** and **All-time** (by points), and **Current streak** (by cases). The streak board ranks runs that are still going: miss a case and your run leaves it. Your longest run ever is on your own file, where a record stays earned. The same four appear on your result card after a solve. Points favour a fast solve without hints.
-- 🗳️ **Difficulty is voted on** - after solving you vote **Harder / Same / Softer**; a clear majority sets tomorrow's case.
+- 🗳️ **Difficulty is voted on** - after solving you vote **Harder / Same / Softer**; a clear majority sets tomorrow's case. When the vote decides nothing, roughly one day in seven is a surprise **hard mode** case - never in a subreddit's first week.
+- ♻️ **Never the same case twice** - every published case is recorded, and a case that has gone out is never picked again while the bank has one that has not.
 - 💬 **Native discussion** - one shared case a day, so detectives compare and defend deductions in the comments, spoilers tagged.
 - 💡 **A hint ladder, not an answer button** - three rungs. *Which clue still works on your board* and *what that clue rules out* are free; only *reveal a cell* costs you a hint, and the price is printed on the button.
 - 🤝 **It notices when you stall** - after three minutes of play and a minute and a half without a new deduction, it offers the free rungs itself. Once per case, never again.
-- 🌱 **A real first run** - newcomers are offered a warm-up case before today's: over-clued, every move forced, purely to teach the mechanic. It counts towards nothing - not the board, not your streak - and there are 15 of them, so a second warm-up is a new case. The warm-up button stays in the board's footer for as long as today's case is open, so a no-stakes round is always one tap away; closing the case replaces it with **See results**.
+- 🌱 **A real first run** - newcomers are offered a warm-up case before today's: over-clued, every move forced, purely to teach the mechanic. It counts towards nothing - not the board, not your streak - and it is the same case every time, opened on a clean board: the lane is there to make the mechanic obvious, and that happens by doing one thing until it is. The warm-up button stays in the board's footer for as long as today's case is open, so a no-stakes round is always one tap away; closing the case replaces it with **See results**.
 
 ## Difficulty - what the board can actually carry
 
@@ -103,7 +104,7 @@ The game is fully server-authoritative; see **App permissions** on the app page 
 ## Under the hood
 
 - **Server-authoritative & cheat-resistant.** The solution and the timer live only on the server (Redis); the webview receives the grid **without** the answer. Because every case has a unique solution, "all cells deduced + no clue contradicted" on the client provably equals the correct answer - and the server re-grades it against the stored solution before recording anything. Recorded time is clamped to the wall clock since you opened the case, and a time below the physical floor for crossing out 12 cells earns no speed points - so a forged result cannot take the podium from a real one.
-- **Deterministic engine, no AI at runtime.** The difficulty engine is a 1:1 TypeScript port of a Python reference solver, **parity-tested** clue-for-clue. Cases are generated and verified offline into a bank of **160** machine-checked puzzles - 15 tutorial, 45 🟢, 100 🟡 - each confirmed to have exactly one solution.
+- **Deterministic engine, no AI at runtime.** The difficulty engine is a 1:1 TypeScript port of a Python reference solver, **parity-tested** clue-for-clue. Cases are generated and verified offline into a bank of **260** machine-checked puzzles - 15 tutorial, 145 🟢, 100 🟡 - each confirmed to have exactly one solution. The bank grows by appending: a new batch is played after the one before it, and nothing already published changes by a byte.
 - **Honest numbers.** A solve-time distribution is only drawn once a case has at least 50 recorded solves (`HIST_MIN`); below that the result screen says which number solver you were today. Leaderboard percentiles need 10 players (`SMALL_N`). A solve recorded by a logged-out visitor is reported as recording nothing, rather than shown an invented streak and rank.
 - **Native Devvit Web.** `express` + `createServer`. `/api/*` is what the two webview entrypoints (the feed card and the board) read and write; `/internal/*` is the moderator menu and the scheduled jobs. Six tasks are registered: a nightly
 rollup that settles the day's points; a one-off job that writes a player's rank flair; the hourly
@@ -153,7 +154,7 @@ In the playtest subreddit: menu (⋯) → **"Deducto: publish a case"** → the 
 **Verified before every deploy** - all of it offline, no subreddit and no network needed. Of the six, only `build:bank` is part of `npm run build`; `npm run deploy` runs the rest for nobody. Note also that `deploy` ends in `install:all`, which installs into the two subreddits hardcoded in `package.json` (`deducto_puzzle_dev`, `deducto_puzzle`) - edit that script before running it anywhere else:
 - ✅ `npm test` - engine parity vs the Python reference (clue anchors 🟡/🟢/🔴, all three live generators, and the hint ladder all match 1:1).
 - ✅ `npm run test:routes` - the **real** Express routes, driven end to end against an in-memory Redis. See below.
-- ✅ `npm run build:bank` - 160/160 cases, each unique and the right tier.
+- ✅ `npm run build:bank` - 260/260 cases, each unique and the right tier.
 - ✅ `npm run check:solvability` - every tutorial and 🟢 case is solvable from board state alone (12/12 cells).
 - ✅ `npx tsx scripts/smoke-status.ts` - on the solution every clue is satisfied and client & server agree, over the whole bank.
 - ✅ `npm run type-check` - clean.

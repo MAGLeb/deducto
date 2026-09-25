@@ -24,7 +24,7 @@ export function resetRedis(): void {
   CALLS.length = 0; HASHES.clear(); STRINGS.clear(); ZSETS.clear();
   SUBMITTED.length = 0; THROW_ON.clear(); THROW_ONCE.clear();
   FLAIRS.length = 0; JOBS.length = 0;
-  SETTINGS.clear(); POST_STATE.clear(); MODMAIL.length = 0; COMMENTS.length = 0;
+  SETTINGS.clear(); POST_STATE.clear(); MODMAIL.length = 0; COMMENTS.length = 0; LISTED_POSTS.length = 0;
   FLAIR_STATE.templates = [{ id: "t1" }];
   FLAIR_STATE.current.clear();
 }
@@ -178,8 +178,26 @@ export const MODMAIL: { subject: string; bodyMarkdown: string }[] = [];
 /** Every comment this run wrote, so a test can assert what the case's thread actually says. */
 export const COMMENTS: { id: string; text: string; runAs?: string }[] = [];
 
+/** Case posts that exist in the "subreddit" but were not created during this test run - history.
+ *  Each carries the postData a real Deducto post carries, which is what the no-repeat seed reads. */
+export const LISTED_POSTS: { id: string; postData: Record<string, unknown> }[] = [];
+
 export const reddit = {
   async getCurrentUsername() { return AUTH.username ?? undefined; },
+  // The subreddit's listing: history first, then everything published during the run, each able to
+  // hand back its own postData - the only place a post's bank index lives.
+  getNewPosts(_o: { subredditName: string; limit?: number; pageSize?: number }) {
+    return {
+      async all() {
+        const boom = THROW_ON.get("getNewPosts");
+        if (boom) throw new Error(boom);
+        const made = SUBMITTED.map((o, k) => ({ id: `t3_p${k + 1}`, postData: (o.postData ?? {}) as Record<string, unknown> }));
+        return [...LISTED_POSTS, ...made].map((p) => ({
+          id: p.id, createdAt: new Date(), async getPostData() { return p.postData; },
+        }));
+      },
+    };
+  },
   modMail: {
     async createModDiscussionConversation(m: { subject: string; bodyMarkdown: string }) {
       MODMAIL.push(m);

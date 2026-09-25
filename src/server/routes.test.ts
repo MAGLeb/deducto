@@ -10,7 +10,7 @@
 //   BUG 2  `opened` can never end up below `moved`, whatever order the endpoints are called in.
 import {
   HASHES, STRINGS, ZSETS, AUTH, THROW_ON, SUBMITTED, context, resetRedis, FLAIRS, FLAIR_STATE, JOBS,
-  CALLS, WRITE_OPS, SETTINGS, POST_STATE, MODMAIL, COMMENTS, THROW_ONCE,
+  CALLS, WRITE_OPS, SETTINGS, POST_STATE, MODMAIL, COMMENTS, THROW_ONCE, LISTED_POSTS,
 } from "./testing/devvit-stub.js";
 import {
   BANK, call, solvedGrid, nudgedGrid, blankGrid, wallGrid, firstOfTier, check, section, finish,
@@ -983,6 +983,171 @@ prev = await call("GET", "/api/preview");
 check("a solved row with no recorded time reports null, never 00:00",
   prev.json?.you?.state === "solved" && prev.json?.you?.timeSec === null,
   JSON.stringify(prev.json?.you));
+
+section("A grown bank is served AFTER the old one, never shuffled into it");
+// 2026-09-25: the daily default is green, the bank held 45 greens, and case #56 had gone out - so
+// the green bucket had already wrapped and the sub was being served repeats. Batch 2 was appended.
+// Appending to ONE pool would have reshuffled it; each batch is spread on its own and they are
+// served end to end. Hard days (below) draw from yellow along the way, so greens are tracked apart.
+const lastIdx = () => (SUBMITTED[SUBMITTED.length - 1].postData as { idx: number }).idx;
+const greensOf = (batch: number | undefined) => BANK.map((e, i) => ({ e, i }))
+  .filter(({ e }) => e.tier === "green" && (e as { batch?: number }).batch === batch).map(({ i }) => i);
+{
+  resetRedis();
+  post(sameDay);
+  const old = greensOf(undefined), fresh = greensOf(2);
+  const greens: number[] = [], yellows: number[] = [];
+  let guard = 0;
+  while (greens.length < old.length + fresh.length && guard++ < 400) {
+    await call("POST", "/internal/menu/create-post");
+    const i = lastIdx();
+    (BANK[i].tier === "green" ? greens : yellows).push(i);
+  }
+  const same = (x: number[], y: number[]) => x.length === y.length && [...x].sort().join() === [...y].sort().join();
+  check("the original greens are served first, each exactly once",
+    same(greens.slice(0, old.length), old), `${greens.slice(0, old.length).length} of ${old.length}`);
+  check("…and THEN every new green exactly once",
+    same(greens.slice(old.length), fresh), `${greens.slice(old.length).length} of ${fresh.length}`);
+  check("…with not one case served twice across the whole run, green or yellow",
+    new Set([...greens, ...yellows]).size === greens.length + yellows.length,
+    `${greens.length} greens, ${yellows.length} yellows`);
+
+  // The production state on the day of the change: the cursor already past the 45 old greens. The
+  // next green must be one nobody has played.
+  resetRedis();
+  post(sameDay);
+  STRINGS.set("lt:bucketCursor:0", "56");
+  STRINGS.set("bank:cursor", "0");   // case #1 is not a hard day under the dice
+  await call("POST", "/internal/menu/create-post");
+  check("a cursor that had already wrapped the old greens lands straight in the new batch",
+    fresh.includes(lastIdx()), `idx ${lastIdx()}`);
+}
+
+section("Never the same case twice - the published set is read from the posts themselves");
+// A cursor going round a loop cannot know what was played; only the posts can. Every Deducto post
+// carries its bank index in postData, so the first publish after the change seeds the set from the
+// listing, exactly - rather than reconstructing it from counters whose bucket order changed twice.
+{
+  resetRedis();
+  post(sameDay);
+  const old = greensOf(undefined);
+  // History: ten greens already out, in an order the CURRENT bucket would never have produced.
+  const history = [old[40], old[3], old[17], old[29], old[8], old[44], old[0], old[21], old[12], old[35]];
+  history.forEach((idx, k) => LISTED_POSTS.push({ id: `t3_hist${k}`, postData: { idx, n: k + 1, date: "2026-08-01" } }));
+  const served: number[] = [];
+  for (let k = 0; k < old.length; k++) {
+    await call("POST", "/internal/menu/create-post");
+    if (BANK[lastIdx()].tier === "green") served.push(lastIdx());
+  }
+  check("the published set is seeded from the posts, all of them",
+    history.every((i) => HASHES.get("lt:served")?.[String(i)] !== undefined),
+    JSON.stringify(Object.keys(HASHES.get("lt:served") ?? {}).length));
+  check("…and not one of those ten is served again",
+    !served.some((i) => history.includes(i)), JSON.stringify(served.filter((i) => history.includes(i))));
+  check("…while the other 35 old greens still come before the new batch",
+    same35(served.slice(0, old.length - history.length), old.filter((i) => !history.includes(i))),
+    `${served.length} served`);
+  function same35(x: number[], y: number[]) { return x.length === y.length && [...x].sort().join() === [...y].sort().join(); }
+
+  // If the listing cannot be read, the counters are the fallback - and the exact walk is retried.
+  resetRedis();
+  post(sameDay);
+  THROW_ON.set("getNewPosts", "listing unavailable");
+  STRINGS.set("lt:bucketCursor:0", "56");
+  await call("POST", "/internal/menu/create-post");
+  check("with the posts unreadable, the counters seed the set instead",
+    Object.keys(HASHES.get("lt:served") ?? {}).length >= old.length,
+    String(Object.keys(HASHES.get("lt:served") ?? {}).length));
+  check("…and the seed is NOT marked done, so the exact walk runs next time",
+    STRINGS.get("lt:servedSeeded") !== "1", String(STRINGS.get("lt:servedSeeded")));
+  THROW_ON.delete("getNewPosts");
+}
+
+section("A hard day, sometimes, when nobody decided the level");
+// Owner: people rarely vote, so when the vote decides nothing the next case is hard mode about one
+// day in seven. The dice are the CASE NUMBER, not Math.random, so the card's forecast of tomorrow's
+// level is what actually ships.
+{
+  resetRedis();
+  post(sameDay);
+  let hard = 0, agree = 0, checked = 0;
+  for (let k = 0; k < 70; k++) {
+    const last = STRINGS.get("lt:lastPostId");
+    let forecast: string | null = null;
+    if (last) {
+      context.postId = last;
+      const pv = await call("GET", "/api/preview");
+      forecast = pv.json?.next?.tier ?? null;
+    }
+    await call("POST", "/internal/menu/create-post");
+    const tier = BANK[lastIdx()].tier;
+    if (tier === "yellow") hard++;
+    if (forecast) { checked++; if (forecast === tier) agree++; }
+  }
+  check("with nobody voting, some days are hard mode - about one in seven",
+    hard >= 4 && hard <= 18, `${hard} of 70`);
+  check("…and the card's forecast of tomorrow's level is right every single time",
+    checked > 0 && agree === checked, `${agree} of ${checked}`);
+  check("…with hard mode named in the post title", SUBMITTED.some((o) => o.title.includes("hard mode")),
+    SUBMITTED.map((o) => o.title).find((t) => t.includes("hard")) ?? "none");
+
+  // A DECIDED vote is followed, dice or not: Same keeps it green every day.
+  resetRedis();
+  post(sameDay);
+  let yellowWhenDecided = 0;
+  for (let k = 0; k < 40; k++) {
+    const last = STRINGS.get("lt:lastPostId");
+    if (last) HASHES.set(`vote:${last}`, { Same: "6", Harder: "0", Softer: "0" });
+    await call("POST", "/internal/menu/create-post");
+    if (BANK[lastIdx()].tier === "yellow") yellowWhenDecided++;
+  }
+  check("when the sub DID decide, the dice never override it", yellowWhenDecided === 0,
+    `${yellowWhenDecided} yellow of 40`);
+  // And a hard day is one-off: the persisted level stays at the default.
+  check("…and a hard day never moves the persisted level", (STRINGS.get("lt:level") ?? "0") === "0",
+    String(STRINGS.get("lt:level")));
+  resetRedis();
+  post(sameDay);
+  context.postId = POST;
+}
+
+section("The warm-up is ONE case, on a clean board every round");
+{
+  resetRedis();
+  post(sameDay);
+  const first = await call("GET", "/api/practice");
+  const idxA = first.json?.puzzle?.idx ?? first.json?.puzzle?.id;
+  STRINGS.set(`onb:${USER}`, "1");     // one warm-up completed
+  const second = await call("GET", "/api/practice");
+  STRINGS.set(`onb:${USER}`, "5");
+  const later = await call("GET", "/api/practice");
+  check("the lane has exactly one case", first.json?.poolSize === 1, String(first.json?.poolSize));
+  check("…every round is that same case",
+    JSON.stringify(second.json?.puzzle?.clues) === JSON.stringify(first.json?.puzzle?.clues)
+    && JSON.stringify(later.json?.puzzle?.clues) === JSON.stringify(first.json?.puzzle?.clues), String(idxA));
+  check("…opened on a clean board, not the last round's marks", second.json?.grid === null,
+    JSON.stringify(second.json?.grid));
+}
+
+section("The per-case record: seeded and written by the hourly job, no button");
+{
+  resetRedis();
+  post(sameDay);
+  const old = greensOf(undefined);
+  LISTED_POSTS.push({ id: "t3_histA", postData: { idx: old[0], n: 1, date: sameDay } });
+  ZSETS.set("lb:t3_histA", new Map([["quillfox", 100], ["harbor_light", 200], ["slowcoach", 300]]));
+  await call("POST", "/internal/scheduler/case-stats");
+  check("the job seeds the no-repeat set on its own, without waiting for a publication",
+    HASHES.get("lt:served")?.[String(old[0])] !== undefined, JSON.stringify(HASHES.get("lt:served")));
+  check("…and writes the table once", Number(STRINGS.get("caselog:dumpedAt")) > 0,
+    String(STRINGS.get("caselog:dumpedAt")));
+  const stamp = STRINGS.get("caselog:dumpedAt");
+  await call("POST", "/internal/scheduler/case-stats");
+  check("…and not again within the day", STRINGS.get("caselog:dumpedAt") === stamp, "");
+  resetRedis();
+  post(sameDay);
+  context.postId = POST;
+}
 
 section("The STREAK tab ranks the run still going, not the record");
 // Owner: "сейчас показывается лучшие стрики за все время, но я думаю надо текущий показывать".

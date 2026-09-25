@@ -31,7 +31,7 @@ src/client/     splash.html/.ts  index.html/main.ts               -> dist/client
                 ledger.ts (the ruled row renderer, shared by both board surfaces, plus
                            the one /api/leaderboard fetch the two in-game surfaces use)
 src/server/     index.ts + engine.ts + leaderboard.ts                 -> dist/server (Express app)
-src/server/     bank.json                     160 prebuilt cases (imported by the server)
+src/server/     bank.json                     260 prebuilt cases (imported by the server)
 src/server/     engine.test.ts (parity), routes.test.ts + testing/ (route-level regression)
 src/shared/     types.ts status.ts themes.ts render.ts   (client + server)
 scripts/        build-bank.ts, check-solvability.ts, check-levels.ts, difficulty.ts,
@@ -39,7 +39,7 @@ scripts/        build-bank.ts, check-solvability.ts, check-levels.ts, difficulty
 devvit.json     Devvit config (post entrypoints, server dir, permissions, mod menu)
 ```
 
-`npm run build` runs `build:bank` (regenerates `bank.json` with 160 cases), then `build:client`,
+`npm run build` runs `build:bank` (rebuilds `bank.json` deterministically), then `build:client`,
 then `build:server`. The server bundle is `dist/server/index.cjs`.
 
 ### Post entrypoints (`devvit.json` → `post.entrypoints`)
@@ -387,17 +387,29 @@ Server-authoritative by construction:
   still kills a standing chip, plus the value two of them share when there are two. 99 of the 100
   🟡 bank cases get a move at that wall; the one that needs four clues at once keeps `stuck`.
 
-`scripts/build-bank.ts` runs offline (`npm run build:bank`, default 160 cases) and writes
+`scripts/build-bank.ts` runs offline (`npm run build:bank`) and writes
 `src/server/bank.json`. Every entry is verified for its tier and for a unique solution, and carries an
 offline difficulty `score` used at runtime to order the warm-up pool easiest-first.
 
 Indices **`0..119` are pinned** (`PINNED = 120`): a live post stores its bank index in `postData`, so
 changing what sits at an index would swap the puzzle under an open post and throw away every player's
 board. Within the pinned range `tierFor()` is the original layout - every 6th case green, the rest
-yellow. Everything after 120 is **appended**: 15 `tutorial`, then green. Result: **160 cases = 15
-tutorial / 45 🟢 / 100 🟡**. Yellow stays at 100 because shrinking it would mean deleting pinned
+yellow. Everything after 120 is **appended**: 15 `tutorial`, then green. Result: **260 cases = 15
+tutorial / 145 🟢 / 100 🟡**. Yellow stays at 100 because shrinking it would mean deleting pinned
 indices. 🔴 is deliberately not generated - brute force on every minimization step, an order of
 magnitude more expensive, and it belongs to a separate hardcore build.
+
+**Growing the bank: `npx tsx scripts/build-bank.ts <N> --append`.** It copies every existing entry
+verbatim - clues, solution and `score` - and generates only past the end. Indices 160..259 are
+batch 2 (2026-09-25): 100 🟢 built HARDER than the originals - no easy band, three in five from the
+hard band (score >= 34) - added because the daily default is green, the bank held 45, and by case
+#56 the bucket had gone round once and was serving repeats. Repeats are now impossible while an
+unplayed case exists: `lt:served` records every published index (seeded from the posts' own
+`postData`), and the pick skips it. New entries carry `batch: 2`, and
+`LEVEL_BUCKETS` spreads each batch on its own and lays them end to end, so the persisted bucket
+cursor continues into the new cases instead of into a reshuffled sequence. A full rebuild without
+`--append` is deterministic and reproduces every clue byte for byte, but it recomputes `score`,
+which orders the warm-up pool - so the bank grows by append, and only by append.
 
 `scripts/check-solvability.ts` (`npm run check:solvability`) is the regression gate on that promise:
 it runs the weak model over the bank and **fails the build** if any tutorial or green case does not
@@ -489,7 +501,7 @@ order to run it - `npm run deploy` builds and uploads, and runs none of these ex
 | --- | --- | --- |
 | `npm test` | `engine.test.ts`: the TypeScript engine is clue-for-clue identical to the Python reference - tier anchors 🟢/🟡/🔴, all three live generators (tutorial / green / yellow), the hint ladder, and the whole bank played to its WEAK wall (every 🟡 board still gets a move, never the true value) | pure functions |
 | `npm run test:routes` | `routes.test.ts`: the real Express routes, end to end | **route level** |
-| `npm run build:bank` | 160/160 cases rebuild deterministically, each unique-solution and correctly tiered | data |
+| `npm run build:bank` | 260/260 cases rebuild deterministically, each unique-solution and correctly tiered | data |
 | `npm run check:solvability` | every tutorial and 🟢 case reaches 12/12 cells from board state alone | data |
 | `npx tsx scripts/smoke-status.ts` | on the stored solution every clue is satisfied, and client and server agree, across the whole bank | data |
 | `npm run type-check` | `tsc --noEmit`, clean | types |

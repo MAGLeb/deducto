@@ -14,6 +14,7 @@ import {
 } from "./leaderboard.js";
 import { flairRouter, queueFlairUpdate, rankState } from "./flair.js";
 import { countHour } from "./hours.js";
+import { maybeDumpStats, seedServed, SERVED_KEY } from "./caselog.js";
 import { makeDailyRouter, NEXT_AT as DAILY_NEXT_AT } from "./daily.js";
 import { CLOSE_AFTER_MS, heraldRouter, scheduleClose, maybeAnnounce } from "./herald.js";
 import {
@@ -34,6 +35,7 @@ interface BankEntry {
   clues: Clue[];
   solution: Solution;
   score?: number; // offline difficulty score (build-bank.ts); orders the warm-up pool
+  batch?: number;  // bank generation; absent = the original bank. See LEVEL_BUCKETS.
 }
 const BANK = bankData as unknown as BankEntry[];
 const CAT_IDS = ["flair", "time", "object"];
@@ -99,7 +101,27 @@ function spreadByTheme(idxs: number[]): number[] {
   return out;
 }
 
-const LEVEL_BUCKETS: number[][] = LEVEL_TIERS.map((t) => spreadByTheme(BY_TIER.get(t)!));
+// ── batch by batch, so a grown bank continues rather than reshuffles ────────────────────────
+// A daily post takes `bucket[(cursor - 1) % bucket.length]`, and the cursor is a counter that
+// persists in Redis. Spreading a grown tier as ONE pool would reorder all of it - spreadByTheme's
+// greedy pick depends on how many cases each theme has left - so the day after an append the
+// cursor would point into a different sequence altogether: the next case could be one the sub
+// played last month, and some never-played ones would be skipped for a full lap.
+//
+// Spreading each batch on its own and laying them end to end keeps the original order exactly
+// where the cursor left it and puts the new cases AFTER it. A cursor that had already wrapped the
+// old batch - which is what 45 greens against case #56 means - lands straight in the new one, and
+// nothing already played comes round again until the whole grown bucket has.
+function bucketFor(idxs: number[]): number[] {
+  const batches = new Map<number, number[]>();
+  for (const i of idxs) {
+    const b = BANK[i].batch ?? 1;
+    const q = batches.get(b);
+    if (q) q.push(i); else batches.set(b, [i]);
+  }
+  return [...batches.keys()].sort((a, b) => a - b).flatMap((b) => spreadByTheme(batches.get(b)!));
+}
+const LEVEL_BUCKETS: number[][] = LEVEL_TIERS.map((t) => bucketFor(BY_TIER.get(t)!));
 const MAX_LEVEL = Math.max(0, LEVEL_BUCKETS.length - 1);
 const LEVEL_LABELS = LEVEL_TIERS.map((t) => TIER_LABEL[t]);
 
@@ -182,10 +204,16 @@ async function nextLevelState(postId: string, tally: Record<VoteChoice, number>)
 > {
   if ((await redis.get("lt:lastPostId")) !== postId) return null;
   const level = Math.max(MIN_LEVEL, Math.min(MAX_LEVEL, await resolveLevel()));
-  const next = levelFromVote(level, tally);
+  const voted = levelFromVote(level, tally);
+  // The same dice createDailyPost will read, so the tier named for tomorrow is the tier that ships.
+  // `moved` stays the VOTE's word: a hard day is not the sub having moved anything, and saying
+  // "the vote is sending it up" about dice would be a claim about people that nobody made.
+  const nextN = (Number((await redis.get("bank:cursor")) ?? 0) || 0) + 1;
+  const ships = voteVerdict(tally) === null && voted === DEFAULT_LEVEL && hardDay(nextN) && MAX_LEVEL > DEFAULT_LEVEL
+    ? DEFAULT_LEVEL + 1 : voted;
   return {
-    tier: LEVEL_TIERS[next] ?? LEVEL_TIERS[0],
-    moved: next > level ? "up" : next < level ? "down" : null,
+    tier: LEVEL_TIERS[ships] ?? LEVEL_TIERS[0],
+    moved: voted > level ? "up" : voted < level ? "down" : null,
     verdict: voteVerdict(tally),
   };
 }
@@ -194,10 +222,16 @@ async function nextLevelState(postId: string, tally: Record<VoteChoice, number>)
 // The pool is the whole "tutorial" tier, easiest first; the per-user counter walks it, so a second
 // warm-up is a DIFFERENT case (it used to be case #78 forever, progress and all). Falls back to the
 // easiest greens when the bank was built without the tutorial tier (`build-bank.ts 120`).
+// ONE case, the easiest, every time - the owner's call (2026-09-25): "на разминку одну и ту же я бы
+// оставил". The lane exists to teach the mechanic, and a mechanic is learned by doing the same thing
+// until it is obvious, not by meeting a new board each round. Every round still opens on a clean
+// board: a practice slot is keyed by the player's own round counter (`pract:{user}:{k}`), not by
+// the case. The other 14 tutorial cases stay in the bank - deleting them would shift every index
+// after them, and published posts store those indices.
 const WARMUP_POOL: number[] = (() => {
   const byScore = (a: number, b: number) => (BANK[a].score ?? 0) - (BANK[b].score ?? 0);
   const tut = (BY_TIER.get("tutorial") ?? []).slice().sort(byScore);
-  if (tut.length) return tut;
+  if (tut.length) return tut.slice(0, 1);
   const green = (BY_TIER.get("green") ?? []).slice().sort(byScore).slice(0, 8);
   return green.length ? green : [0];
 })();
@@ -1161,23 +1195,83 @@ async function liveEpilogue(e: EpilogueData | null): Promise<EpilogueData | null
   return { ...e, solvers, who: top[0]?.member ?? e.who, timeSec: top[0]?.score ?? e.timeSec };
 }
 
+// ── never the same case twice ─────────────────────────────────────────────────────────────────
+// The pick walks the level's bucket from where its cursor stands and takes the first case that has
+// never been published (`lt:served`, seeded once from the posts themselves - see caselog.ts). The
+// claim is an hSetNX, so two publishes racing for one case cannot both win it. Only when EVERY case
+// of the level has gone out does it repeat, and it says so in the log rather than quietly looping.
+async function pickCase(level: number, n: number): Promise<number> {
+  const bucket = LEVEL_BUCKETS[level] ?? LEVEL_BUCKETS[0] ?? WARMUP_POOL;
+  const cursorKey = `lt:bucketCursor:${level}`;
+  const start = Number((await redis.get(cursorKey)) ?? 0) || 0;
+  const served = await redis.hGetAll(SERVED_KEY);
+  for (let step = 0; step < bucket.length; step++) {
+    const idx = bucket[(start + step) % bucket.length];
+    if (served[String(idx)] !== undefined) continue;
+    if ((await redis.hSetNX(SERVED_KEY, String(idx), String(n))) !== 1) continue;
+    await redis.set(cursorKey, String(start + step + 1));
+    return idx;
+  }
+  console.error(`[bank] level ${level}: all ${bucket.length} cases have been published - REPEATING. ` +
+    "Grow the bank: npx tsx scripts/build-bank.ts <N> --append");
+  await redis.set(cursorKey, String(start + 1));
+  return bucket[start % bucket.length];
+}
+
+/** The fallback seed, used only if the posts cannot be listed: what the old counters imply. Under
+    the old pick a level's cursor `c` had served bucket positions 0..c-1 of its FIRST batch. */
+async function servedFromCursors(): Promise<number[]> {
+  const out: number[] = [];
+  for (let level = 0; level < LEVEL_BUCKETS.length; level++) {
+    const c = Number((await redis.get(`lt:bucketCursor:${level}`)) ?? 0) || 0;
+    const first = LEVEL_BUCKETS[level].filter((i) => (BANK[i].batch ?? 1) === 1);
+    out.push(...first.slice(0, Math.min(c, first.length)));
+  }
+  return out;
+}
+
+// ── a hard day, sometimes, when nobody decided ────────────────────────────────────────────────
+// Owner (2026-09-25): "люди мало голосуют ... если не проголосовали, пусть иногда случайно
+// попадаются сложная". So when the previous case's vote decided nothing, the next case is hard mode
+// about one day in HARD_EVERY. The dice are a hash of the CASE NUMBER rather than Math.random, for
+// one reason: the feed card and the result sheet announce the next case's level in advance, and a
+// random draw at publish time would make that announcement a guess. Keyed on the number, the server
+// knows today what tomorrow will be, and everything it prints about it stays true.
+const HARD_EVERY = 7;
+function hardDay(n: number): boolean {
+  // Never in a subreddit's first week. The dice put case #1 on a hard day, which on a fresh install
+  // is a newcomer's FIRST case being hard mode - the worst first impression this app can make, and
+  // exactly the drop-off decision 42 moved the default to green to stop.
+  if (n <= HARD_EVERY) return false;
+  let h = 2166136261;
+  for (const ch of `deducto:hard:${n}`) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); }
+  return ((h >>> 0) % HARD_EVERY) === 0;
+}
+
 async function createDailyPost() {
   const prevPostId = await redis.get("lt:lastPostId");
   const epilogue = prevPostId ? await summarize(prevPostId) : null;
 
   // vote → difficulty: shift the global series level by the previous post's community vote
   let level = await resolveLevel();
-  if (prevPostId) level = levelFromVote(level, await voteTally(prevPostId));
+  let decided = false;
+  if (prevPostId) {
+    const tally = await voteTally(prevPostId);
+    decided = voteVerdict(tally) !== null;
+    level = levelFromVote(level, tally);
+  }
   level = Math.max(MIN_LEVEL, Math.min(MAX_LEVEL, level));
   await redis.set(LEVEL_KEY, String(level));
   await redis.set(LEVEL_BASE_KEY, String(DEFAULT_LEVEL)); // the default this value descends from
 
-  // pick a case from the level's bucket, rotating within it to avoid repeats
-  const bucket = LEVEL_BUCKETS[level] ?? LEVEL_BUCKETS[0] ?? WARMUP_POOL;
-  const bcur = await redis.incrBy(`lt:bucketCursor:${level}`, 1);
-  const idx = bucket[(bcur - 1) % bucket.length];
-
+  // The case number is drawn FIRST, because it is what the hard-day dice read - see hardDay().
   const n = await redis.incrBy("bank:cursor", 1); // monotonic case number
+  // A hard day: nobody decided the level, it is sitting at the default, and the dice for this case
+  // number say so. One-off - `level` is what persists, `serveLevel` is only what goes out today.
+  const serveLevel = !decided && level === DEFAULT_LEVEL && hardDay(n) && MAX_LEVEL > DEFAULT_LEVEL
+    ? DEFAULT_LEVEL + 1 : level;
+  await seedServed(servedFromCursors);
+  const idx = await pickCase(serveLevel, n);
   const date = new Date().toISOString().slice(0, 10);
   const entry = BANK[idx];
   const theme = THEME_BY_ID[entry.themeId];
@@ -1185,13 +1279,13 @@ async function createDailyPost() {
   // daily and passes for exactly that reason). The tier label rides along ONLY when the ramp has
   // moved off the default - on the default it is a constant tail on every single post, i.e. more
   // headline similarity, not less.
-  const tierLabel = level === DEFAULT_LEVEL ? "" : ` · ${LEVEL_LABELS[level] ?? ""}`;
+  const tierLabel = serveLevel === DEFAULT_LEVEL ? "" : ` · ${LEVEL_LABELS[serveLevel] ?? ""}`;
 
   const post = await reddit.submitCustomPost({
     subredditName: context.subredditName,
     title: `Case #${n} · ${date} · ${theme?.title ?? "New Case"}${tierLabel}`,
     entry: "default",
-    postData: { idx, date, n, level, epilogue },
+    postData: { idx, date, n, level: serveLevel, epilogue },
   });
   await redis.set("lt:lastPostId", post.id);
   // The day the sub is currently playing. Written from the SAME `date` that went into postData, so
@@ -1202,7 +1296,7 @@ async function createDailyPost() {
   // post itself. Queued from HERE rather than from the scheduler, so a case published by hand from
   // the mod menu gets its epilogue on exactly the same terms as one published automatically.
   await scheduleClose(post.id, n);
-  return { post, n, level, tier: entry.tier, date };
+  return { post, n, level: serveLevel, tier: entry.tier, date, hard: serveLevel !== level };
 }
 
 // Devvit Redis cannot list keys, so a post we never wrote down is a post the funnel can never find
@@ -1218,7 +1312,7 @@ async function registerPost(postId: string): Promise<void> {
 // the difficulty was only visible by opening the post. One clause is the whole difference.
 router.post("/internal/menu/create-post", async (_req, res) => {
   const previousDay = await redis.get(LAST_DAY_KEY);
-  const { post, n, level, tier, date } = await createDailyPost();
+  const { post, n, level, tier, date, hard } = await createDailyPost();
   // A day holds ONE scored result per player (writeSolve keeps their best close of the day), so a
   // second case on the same date does not double anyone's points and does not get its own board.
   // Publishing has no same-day guard - README calls that a known gap - and it has already happened
@@ -1227,7 +1321,8 @@ router.post("/internal/menu/create-post", async (_req, res) => {
   res.json({
     navigateTo: post.url,
     showToast: `Case #${n} published · ${tier} · level ${level}` +
-      (level === DEFAULT_LEVEL ? " (the default)" : " (moved here by the vote)") +
+      (hard ? " (a random hard day - nobody voted)"
+        : level === DEFAULT_LEVEL ? " (the default)" : " (moved here by the vote)") +
       (sameDay
         ? ` · ⚠ second case on ${date}: the day already has a board, so each player is still scored once for the day (their fastest close) and this case adds no points to anyone who already solved today.`
         : ""),
@@ -1381,6 +1476,25 @@ router.post("/internal/menu/funnel", async (_req, res) => {
 // banned - it is gone rather than left as a second, unguarded way in.
 router.use(makeDailyRouter(createDailyPost));
 router.use(heraldRouter);
+
+// Hourly, and a no-op 19 hours in 20: it seeds the no-repeat set on its first run after a deploy
+// (so the seed does not wait for the next publication) and writes the per-case table once a day.
+router.post("/internal/scheduler/case-stats", async (_req, res) => {
+  try {
+    const info = (i: number) => BANK[i]
+      ? { tier: BANK[i].tier, score: BANK[i].score ?? 0, clues: BANK[i].clues.length } : null;
+    const remaining = async () => {
+      const served = await redis.hGetAll(SERVED_KEY);
+      return "unplayed left: " + LEVEL_TIERS.map((t, l) =>
+        `${t} ${LEVEL_BUCKETS[l].filter((i) => served[String(i)] === undefined).length}/${LEVEL_BUCKETS[l].length}`)
+        .join(" · ");
+    };
+    console.log(`[cases] ${await maybeDumpStats(info, servedFromCursors, remaining)}`);
+  } catch (e) {
+    console.error("[cases] stats job failed", e);
+  }
+  res.json({ status: "ok" });
+});
 
 // ── practice / onboarding: warm-up lane, isolated from the daily (no lb/vote/streak) ──
 // Serves the tutorial tier, rotating through WARMUP_POOL by the per-user counter, so a second

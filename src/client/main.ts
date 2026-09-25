@@ -1651,7 +1651,10 @@ async function enterPractice(withCoach = false) {
 
   const n = (pr.warmupsDone ?? 0) + 1;
   const total = pr.poolSize ?? 0;
-  $("case-no").textContent = total ? `WARM-UP ${n}/${total}` : "WARM-UP";
+  // A counter only means something over a ladder of different cases. The lane is ONE case now
+  // (the same board every round, freshly cleared), and `WARM-UP 3/1` would be a number arguing
+  // with itself.
+  $("case-no").textContent = total > 1 ? `WARM-UP ${n}/${total}` : "WARM-UP";
   $("case-title").textContent = pr.puzzle.title;
   // no tier stamp in the lane: "WARM-UP n/total" in the case slot already carries both the
   // identity and the difficulty, and a second WARM-UP mark beside it is a stamp saying nothing

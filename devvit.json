@@ -39,6 +39,10 @@
       },
       "case-record": {
         "endpoint": "/internal/scheduler/case-record"
+      },
+      "case-stats": {
+        "endpoint": "/internal/scheduler/case-stats",
+        "cron": "20 * * * *"
       }
     }
   },
